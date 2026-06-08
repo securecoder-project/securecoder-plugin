@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# run-sast — adapter script between Claude Code hooks and your SAST backend
+# Swap out the TOOL block below for your actual analyzer(s).
+# Output format: one finding per line, prefixed with severity tag.
+# Exit 0 always (non-zero exit blocks the hook chain).
+
+set -euo pipefail
+
+FILE="${1:-}"
+if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
+  exit 0
+fi
+
+EXT="${FILE##*.}"
+FINDINGS=""
+
+# ── TOOL BLOCK ─────────────────────────────────────────────────────────────
+# Replace / extend these with your actual tools.
+# Convention: emit lines like "[HIGH] RULE_ID line N: description"
+
+case "$EXT" in
+  py)
+    if command -v bandit &>/dev/null; then
+      FINDINGS=$(bandit -q -f custom \
+        --msg-template "[{severity}] {test_id} line {line}: {msg}" \
+        "$FILE" 2>/dev/null || true)
+    fi
+    ;;
+  js|ts|jsx|tsx)
+    if command -v semgrep &>/dev/null; then
+      FINDINGS=$(semgrep --config=p/javascript --config=p/typescript \
+        --quiet --no-git-ignore \
+        --output-format=text "$FILE" 2>/dev/null || true)
+    fi
+    ;;
+  java)
+    if command -v semgrep &>/dev/null; then
+      FINDINGS=$(semgrep --config=p/java --quiet --no-git-ignore \
+        --output-format=text "$FILE" 2>/dev/null || true)
+    fi
+    ;;
+  kt|kts)
+    # Hook into your existing Kotlin/IntelliJ pipeline here.
+    # e.g. call your MCP server or a local CLI wrapper:
+    # FINDINGS=$(securecoder-cli analyze "$FILE" 2>/dev/null || true)
+    :
+    ;;
+  *)
+    if command -v semgrep &>/dev/null; then
+      FINDINGS=$(semgrep --config=auto --quiet --no-git-ignore \
+        --output-format=text "$FILE" 2>/dev/null || true)
+    fi
+    ;;
+esac
+# ── END TOOL BLOCK ──────────────────────────────────────────────────────────
+
+if [ -z "$FINDINGS" ]; then
+  exit 0
+fi
+
+# Emit findings to stdout — Claude Code injects hook stdout back into context.
+echo "SAST FINDINGS for $FILE:"
+echo "$FINDINGS"
+echo ""
+echo "Invoking securecoder-remediator agent to address the above findings."

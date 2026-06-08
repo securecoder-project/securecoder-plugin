@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'FILE=$(echo \"$CLAUDE_TOOL_INPUT\" | jq -r \".file_path // .path // empty\"); [ -z \"$FILE\" ] && exit 0; \"$(dirname \"$0\")/../bin/run-sast\" \"$FILE\"'",
+            "description": "Run SAST on any file written or edited by Claude"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'CMD=$(echo \"$CLAUDE_TOOL_INPUT\" | jq -r \".command // empty\"); echo \"$CMD\" | grep -qiE \"(eval|exec|\\$\\(|`|os\\.system|subprocess\\.call|shell=True)\" && echo \"[securecoder] WARNING: potentially unsafe shell pattern detected in command\" >&2; exit 0'",
+            "description": "Warn on shell injection patterns in bash commands Claude is about to run"
+          }
+        ]
+      }
+    ]
+  }
+}
