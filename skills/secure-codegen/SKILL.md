@@ -1,8 +1,8 @@
 ---
 description: >
-  Security-aware code generation. Auto-invoked whenever writing, refactoring, or reviewing
-  code — injects security constraints before generation and attaches SAST findings after.
-  Use explicitly via /securecoder:secure-codegen to trigger the full pipeline manually.
+    Security-aware code generation. Auto-invoked whenever writing, refactoring, or reviewing
+    code — injects security constraints before generation and attaches SAST findings after.
+    Use explicitly via /securecoder:secure-codegen to trigger the full pipeline manually.
 ---
 
 # SecureCoder: Secure Code Generation Skill
@@ -11,9 +11,15 @@ You are generating code with security as a first-class constraint, not an aftert
 
 ## Pre-Generation Constraint Injection
 
-Before writing ANY code, reason through the following security properties for the task at hand:
+If the `securecoder_enrich_prompt` MCP tool is available, pass the user's task description
+through it first and honor every injected constraint — they are contract-preserving rules
+(keep names, signatures, sync/async behavior, and requested algorithms exact; fix only the
+unsafe part).
+
+Then, before writing ANY code, reason through the following security properties for the task at hand:
 
 ### Threat Modelling (brief, inline)
+
 - What is the trust boundary for this code? (user input? external API? filesystem?)
 - What's the worst-case exploitation if this code has a bug? (RCE, data leak, privilege escalation, DoS?)
 - Which OWASP Top 10 categories are relevant here?
@@ -21,35 +27,41 @@ Before writing ANY code, reason through the following security properties for th
 ### Mandatory Constraints by Code Category
 
 **Input handling / parsing**
+
 - All external input MUST be validated and sanitized before use
 - Prefer allowlists over denylists
 - Never pass raw user input to shell commands, SQL, or eval-equivalent calls
 - Use parameterized queries / prepared statements, no string interpolation into queries
 
 **Authentication / authorization**
+
 - Fail closed: deny by default, grant explicitly
 - Do not roll custom crypto — use established libraries (libsodium, bcrypt, argon2, etc.)
 - Secrets (tokens, passwords, keys) never in source code, env vars or secret manager only
 
 **Memory / resource safety** (C/C++/Rust unsafe)
+
 - Annotate all unsafe blocks with a SAFETY comment explaining the invariant
 - Prefer bounded operations; flag all unbounded loops / allocations
 
 **Serialization / deserialization**
+
 - Validate schema before deserializing untrusted data
 - Never deserialize arbitrary objects from untrusted sources (Java ObjectInputStream, Python pickle, etc.)
 
 **Concurrency**
+
 - Identify all shared mutable state; prefer immutable data or ownership-based concurrency
 - Flag potential TOCTOU conditions
 
 **Dependencies**
+
 - Flag any new dependency introduced; note the purpose and whether a stdlib alternative exists
 - Prefer pinned versions
 
 ## Generation Mode
 
-Write the code. Embed inline security comments (`// SECURITY:`) at any point where a security decision was made — e.g., why a particular sanitization was chosen, why a particular algorithm, why a boundary check exists. These comments are not noise; they are the audit trail.
+Write the code. Embed inline security comments (`// SECURITY:`, or `) at any point where a security decision was made — e.g., why a particular sanitization was chosen, why a particular algorithm, why a boundary check exists. These comments are not noise; they are the audit trail.
 
 ## Post-Generation Self-Review Checklist
 
@@ -72,9 +84,15 @@ If any HIGH severity finding exists, STOP and fix before presenting the code.
 
 ## Static Analyzer Integration
 
-After file write, the `securecoder-sast-hook` will run your configured static analyzer(s).
-If the hook returns findings, they will be injected into context automatically.
-When findings are present, invoke the `securecoder-remediator` agent to handle the feedback loop.
+After each file write, the PostToolUse hook runs the fast SecureCoder guardians (syntax
+hard-reject checks, semgrep, bandit) and injects any findings into context automatically.
+
+For deep analysis, call the `securecoder_analyze` MCP tool with `deep: true` — this runs
+CodeQL with security-extended query suites (slow: builds a CodeQL database).
+
+When findings are present, invoke the `securecoder-remediator` agent to run the fix →
+re-analyze loop. It uses `securecoder_analyze` with a session id so the server tracks
+attempts against the configured soft/hard retry limits.
 
 ## $ARGUMENTS
 

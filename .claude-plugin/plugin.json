@@ -1,0 +1,13 @@
+{
+    "name": "securecoder",
+    "description": "Security-aware code generation pipeline: constraint injection, static analysis feedback, and iterative remediation for Claude Code.",
+    "version": "0.1.0",
+    "author": {
+        "name": "parsakaz",
+        "url": "https://parsakaz.github.io"
+    },
+    "homepage": "https://github.com/parsakaz/securecoder-plugin",
+    "repository": "https://github.com/parsakaz/securecoder-plugin",
+    "license": "MIT",
+    "keywords": ["security", "sast", "code-generation", "owasp", "pipeline"]
+}

@@ -1,0 +1,37 @@
+{
+  "_comment": "SecureCoder project config. Place this at your repo root. All keys optional; see mcp-server/lib/config.js for defaults.",
+  "analyzers": ["syntax", "semgrep", "bandit"],
+  "deep_analyzers": ["codeql"],
+  "semgrep_config": "p/owasp-top-ten",
+  "severity_threshold": "HIGH",
+  "exclude_patterns": [
+    "tests/",
+    "*.test.js",
+    "*.test.ts",
+    "*.spec.*",
+    "migrations/",
+    "node_modules/",
+    "__pycache__/"
+  ],
+  "retry": {
+    "soft_limit": 7,
+    "hard_limit": 14
+  },
+  "codeql": {
+    "binary": "codeql",
+    "languages": null,
+    "query_packs": {},
+    "threads": 1,
+    "ram_mb": 2048,
+    "timeout_seconds": 600
+  },
+  "bins": {
+    "python": "python3",
+    "node": "node",
+    "gofmt": "gofmt",
+    "clang": "clang",
+    "clangxx": "clang++",
+    "semgrep": "semgrep",
+    "bandit": "bandit"
+  }
+}

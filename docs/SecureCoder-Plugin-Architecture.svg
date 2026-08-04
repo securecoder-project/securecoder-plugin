@@ -1,0 +1,87 @@
+<svg width="1440" height="910" viewBox="0 0 1440 910" xmlns="http://www.w3.org/2000/svg"><rect width="1440" height="910" fill="white"/>
+<rect x="25" y="25" width="1390" height="795" fill="white" stroke="#111111" stroke-width="2.5"/>
+<polygon points="150,176 176,176 150,210" fill="#EEF2F8" stroke="#111111" stroke-width="2.5"/>
+<rect x="65" y="112" width="235" height="66" rx="10" fill="#EEF2F8" stroke="#111111" stroke-width="2.5"/>
+<text x="182" y="154" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="20"  fill="#111111" text-anchor="middle"  >“Add a feature to …”</text>
+<circle cx="177" cy="285" r="37" fill="#111111"/>
+<path d="M 115 395 a 62 54 0 0 1 124 0 l 0 12 l -124 0 z" fill="#111111"/>
+<text x="177" y="445" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="22"  fill="#111111" text-anchor="middle"  >Developer</text>
+<rect x="360" y="70" width="630" height="700" fill="none" stroke="#111111" stroke-width="2.5" stroke-dasharray="11 8"/>
+<text x="380" y="105" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="19" font-weight="bold" fill="#111111" text-anchor="start"  letter-spacing="2">CLAUDE CODE</text>
+<text x="380" y="128" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="14"  fill="#111111" text-anchor="start"  >skill · hook · agent, one install</text>
+<rect x="1010" y="70" width="395" height="700" fill="none" stroke="#111111" stroke-width="2.5" stroke-dasharray="11 8"/>
+<text x="1030" y="105" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="19" font-weight="bold" fill="#111111" text-anchor="start"  letter-spacing="2">SECURECODER-ANALYSIS</text>
+<text x="1030" y="128" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="14"  fill="#111111" text-anchor="start"  >MCP server</text>
+<rect x="430" y="182" width="280" height="115" rx="14" fill="white" stroke="#111111" stroke-width="2.5"/>
+<svg x="452" y="222" stroke="currentColor" fill="none" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" color="#111111" style="color:#111111" height="34" width="34" xmlns="http://www.w3.org/2000/svg"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="m9 12 2 2 4-4"></path></svg>
+<text x="598" y="235" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="20" font-weight="bold" fill="#111111" text-anchor="middle"  >secure-codegen skill</text>
+<text x="598" y="263" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="15"  fill="#111111" text-anchor="middle"  >auto-invoked on codegen</text>
+<circle cx="430" cy="182" r="19" fill="white" stroke="#111111" stroke-width="2.5"/>
+  <text x="430" y="189" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#111111" text-anchor="middle">2</text>
+<rect x="1040" y="182" width="330" height="115" rx="14" fill="white" stroke="#111111" stroke-width="2.5"/>
+<svg x="1062" y="222" stroke="currentColor" fill="none" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" color="#111111" style="color:#111111" height="34" width="34" xmlns="http://www.w3.org/2000/svg"><line x1="21" x2="14" y1="4" y2="4"></line><line x1="10" x2="3" y1="4" y2="4"></line><line x1="21" x2="12" y1="12" y2="12"></line><line x1="8" x2="3" y1="12" y2="12"></line><line x1="21" x2="16" y1="20" y2="20"></line><line x1="12" x2="3" y1="20" y2="20"></line><line x1="14" x2="14" y1="2" y2="6"></line><line x1="8" x2="8" y1="10" y2="14"></line><line x1="16" x2="16" y1="18" y2="22"></line></svg>
+<text x="1223" y="235" font-family="DejaVu Sans Mono, Courier New, monospace" font-size="21" font-weight="bold" fill="#111111" text-anchor="middle"  >enrich_prompt</text>
+<text x="1223" y="263" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="14"  fill="#111111" text-anchor="middle"  >contract-preserving constraints</text>
+<circle cx="1040" cy="182" r="19" fill="white" stroke="#111111" stroke-width="2.5"/>
+  <text x="1040" y="189" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#111111" text-anchor="middle">3</text>
+<circle cx="570" cy="470" r="82" fill="white" stroke="#111111" stroke-width="2.5"/>
+<svg x="556" y="408" stroke="currentColor" fill="none" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" color="#111111" style="color:#111111" height="28" width="28" xmlns="http://www.w3.org/2000/svg"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path></svg>
+<text x="570" y="475" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="26" font-weight="bold" fill="#111111" text-anchor="middle"  >Claude</text>
+<text x="570" y="502" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="14"  fill="#111111" text-anchor="middle"  >code model + loop</text>
+<circle cx="512" cy="412" r="19" fill="white" stroke="#111111" stroke-width="2.5"/>
+  <text x="512" y="419" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#111111" text-anchor="middle">4</text>
+<rect x="748" y="410" width="230" height="120" rx="14" fill="white" stroke="#111111" stroke-width="2.5"/>
+<svg x="768" y="455" stroke="currentColor" fill="none" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" color="#111111" style="color:#111111" height="30" width="30" xmlns="http://www.w3.org/2000/svg"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg>
+<text x="880" y="462" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#111111" text-anchor="middle"  >Remediator</text>
+<text x="880" y="490" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="14"  fill="#111111" text-anchor="middle"  >agent, own context</text>
+<circle cx="748" cy="410" r="19" fill="white" stroke="#111111" stroke-width="2.5"/>
+  <text x="748" y="417" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#111111" text-anchor="middle">7</text>
+<rect x="1040" y="410" width="330" height="120" rx="14" fill="white" stroke="#111111" stroke-width="2.5"/>
+<svg x="1062" y="452" stroke="currentColor" fill="none" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" color="#111111" style="color:#111111" height="32" width="32" xmlns="http://www.w3.org/2000/svg"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"></path><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"></path><path d="M7 21h10"></path><path d="M12 3v18"></path><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"></path></svg>
+<text x="1223" y="452" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#111111" text-anchor="middle"  >Retry sessions</text>
+<text x="1223" y="480" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="14"  fill="#111111" text-anchor="middle"  >resolved / new / persisting</text>
+<text x="1223" y="502" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="14"  fill="#111111" text-anchor="middle"  >verdict: continue or clean</text>
+<circle cx="1040" cy="410" r="19" fill="white" stroke="#111111" stroke-width="2.5"/>
+  <text x="1040" y="417" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#111111" text-anchor="middle">8</text>
+<rect x="430" y="640" width="280" height="115" rx="14" fill="white" stroke="#111111" stroke-width="2.5"/>
+<svg x="452" y="680" stroke="currentColor" fill="none" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" color="#111111" style="color:#111111" height="34" width="34" xmlns="http://www.w3.org/2000/svg"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"></path></svg>
+<text x="588" y="693" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#111111" text-anchor="middle"  >PostToolUse hook</text>
+<text x="588" y="721" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="15"  fill="#111111" text-anchor="middle"  >run-sast on Write / Edit</text>
+<circle cx="430" cy="640" r="19" fill="white" stroke="#111111" stroke-width="2.5"/>
+  <text x="430" y="647" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#111111" text-anchor="middle">5</text>
+<rect x="1040" y="640" width="330" height="115" rx="14" fill="white" stroke="#111111" stroke-width="2.5"/>
+<svg x="1058" y="666" stroke="currentColor" fill="none" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" color="#111111" style="color:#111111" height="24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+<svg x="1078" y="688" stroke="currentColor" fill="none" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" color="#111111" style="color:#111111" height="28" width="28" xmlns="http://www.w3.org/2000/svg"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+<text x="1223" y="693" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#111111" text-anchor="middle"  >Guardian pipeline</text>
+<text x="1223" y="721" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="14"  fill="#111111" text-anchor="middle"  >syntax · semgrep · bandit · CodeQL</text>
+<circle cx="1040" cy="640" r="19" fill="white" stroke="#111111" stroke-width="2.5"/>
+  <text x="1040" y="647" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#111111" text-anchor="middle">6</text>
+<g transform="translate(240,240) rotate(0)"><polygon points="0,-6.5 160,-6.5 160,-17 186,0 160,17 160,6.5 0,6.5" fill="white" stroke="#111111" stroke-width="2.5"/></g>
+<text x="316" y="218" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="16"  fill="#111111" text-anchor="middle"  >prompt</text>
+<circle cx="333" cy="276" r="19" fill="white" stroke="#111111" stroke-width="2.5"/>
+  <text x="333" y="283" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="21" font-weight="bold" fill="#111111" text-anchor="middle">1</text>
+<g transform="translate(712,221) rotate(0)"><polygon points="0,-6.5 298,-6.5 298,-17 324,0 298,17 298,6.5 0,6.5" fill="white" stroke="#111111" stroke-width="2.5"/></g>
+<text x="874" y="203" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="16"  fill="#111111" text-anchor="middle"  >task</text>
+<g transform="translate(1036,266) rotate(180)"><polygon points="0,-6.5 298,-6.5 298,-17 324,0 298,17 298,6.5 0,6.5" fill="white" stroke="#111111" stroke-width="2.5"/></g>
+<text x="874" y="296" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="16"  fill="#111111" text-anchor="middle"  >constraints</text>
+<g transform="translate(570,299) rotate(90)"><polygon points="0,-6.5 59,-6.5 59,-17 85,0 59,17 59,6.5 0,6.5" fill="white" stroke="#111111" stroke-width="2.5"/></g>
+<text x="590" y="345" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="16"  fill="#111111" text-anchor="start"  >security-first prompt</text>
+<g transform="translate(534,554) rotate(90)"><polygon points="0,-6.5 56,-6.5 56,-17 82,0 56,17 56,6.5 0,6.5" fill="white" stroke="#111111" stroke-width="2.5"/></g>
+<text x="516" y="596" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="16"  fill="#111111" text-anchor="middle" transform="rotate(-90 516 596)" >code</text>
+<g transform="translate(606,636) rotate(-90)"><polygon points="0,-6.5 56,-6.5 56,-17 82,0 56,17 56,6.5 0,6.5" fill="white" stroke="#111111" stroke-width="2.5"/></g>
+<text x="628" y="596" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="16"  fill="#111111" text-anchor="middle" transform="rotate(90 628 596)" >to context</text>
+<g transform="translate(712,675) rotate(0)"><polygon points="0,-6.5 298,-6.5 298,-17 324,0 298,17 298,6.5 0,6.5" fill="white" stroke="#111111" stroke-width="2.5"/></g>
+<text x="874" y="658" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="16"  fill="#111111" text-anchor="middle"  >files</text>
+<g transform="translate(1036,722) rotate(180)"><polygon points="0,-6.5 298,-6.5 298,-17 324,0 298,17 298,6.5 0,6.5" fill="white" stroke="#111111" stroke-width="2.5"/></g>
+<text x="874" y="750" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="16"  fill="#111111" text-anchor="middle"  >findings</text>
+<g transform="translate(1205,638) rotate(-90)"><polygon points="0,-6.5 78,-6.5 78,-17 104,0 78,17 78,6.5 0,6.5" fill="white" stroke="#111111" stroke-width="2.5"/></g>
+<text x="1224" y="590" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="16"  fill="#111111" text-anchor="start"  >results</text>
+<g transform="translate(1038,470) rotate(180)"><polygon points="0,-6.5 30,-6.5 30,-17 56,0 30,17 30,6.5 0,6.5" fill="white" stroke="#111111" stroke-width="2.5"/></g>
+<text x="985" y="400" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="16"  fill="#111111" text-anchor="end"  >verdict</text>
+<g transform="translate(654,450) rotate(0)"><polygon points="0,-6.5 64,-6.5 64,-17 90,0 64,17 64,6.5 0,6.5" fill="white" stroke="#111111" stroke-width="2.5"/></g>
+<text x="699" y="484" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="16"  fill="#111111" text-anchor="middle"  >on findings</text>
+<g transform="translate(900,532) rotate(29.156917882312992)"><polygon points="0,-6.5 191.6,-6.5 191.6,-17 217.6,0 191.6,17 191.6,6.5 0,6.5" fill="white" stroke="#111111" stroke-width="2.5"/></g>
+<text x="985" y="605" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="16"  fill="#111111" text-anchor="end"  >analyze</text>
+<g transform="translate(486,484) rotate(180)"><polygon points="0,-6.5 220,-6.5 220,-17 246,0 220,17 220,6.5 0,6.5" fill="white" stroke="#111111" stroke-width="2.5"/></g>
+<text x="363" y="516" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="16"  fill="#111111" text-anchor="middle"  >clean code</text>
+<text x="720" y="872" font-family="Helvetica, Arial, DejaVu Sans, sans-serif" font-size="30"  fill="#111111" text-anchor="middle"  >Figure: An overview of the SecureCoder Claude Code plugin</text></svg>

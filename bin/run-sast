@@ -1,58 +1,51 @@
 #!/usr/bin/env bash
-# run-sast — adapter script between Claude Code hooks and your SAST backend
-# Swap out the TOOL block below for your actual analyzer(s).
+# run-sast — adapter between Claude Code hooks and the SecureCoder pipeline.
+# Prefers the bundled Node guardian pipeline (mcp-server/cli.js: syntax
+# hard-reject checks + semgrep + bandit, same code as the MCP server); falls
+# back to direct bandit/semgrep invocation when Node is unavailable.
 # Output format: one finding per line, prefixed with severity tag.
 # Exit 0 always (non-zero exit blocks the hook chain).
 
-set -euo pipefail
+set -uo pipefail
 
 FILE="${1:-}"
 if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
   exit 0
 fi
 
-EXT="${FILE##*.}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(dirname "$SCRIPT_DIR")"
 FINDINGS=""
 
-# ── TOOL BLOCK ─────────────────────────────────────────────────────────────
-# Replace / extend these with your actual tools.
-# Convention: emit lines like "[HIGH] RULE_ID line N: description"
-
-case "$EXT" in
-  py)
-    if command -v bandit &>/dev/null; then
-      FINDINGS=$(bandit -q -f custom \
-        --msg-template "[{severity}] {test_id} line {line}: {msg}" \
-        "$FILE" 2>/dev/null || true)
-    fi
-    ;;
-  js|ts|jsx|tsx)
-    if command -v semgrep &>/dev/null; then
-      FINDINGS=$(semgrep --config=p/javascript --config=p/typescript \
-        --quiet --no-git-ignore \
-        --output-format=text "$FILE" 2>/dev/null || true)
-    fi
-    ;;
-  java)
-    if command -v semgrep &>/dev/null; then
-      FINDINGS=$(semgrep --config=p/java --quiet --no-git-ignore \
-        --output-format=text "$FILE" 2>/dev/null || true)
-    fi
-    ;;
-  kt|kts)
-    # Hook into your existing Kotlin/IntelliJ pipeline here.
-    # e.g. call your MCP server or a local CLI wrapper:
-    # FINDINGS=$(securecoder-cli analyze "$FILE" 2>/dev/null || true)
-    :
-    ;;
-  *)
-    if command -v semgrep &>/dev/null; then
-      FINDINGS=$(semgrep --config=auto --quiet --no-git-ignore \
-        --output-format=text "$FILE" 2>/dev/null || true)
-    fi
-    ;;
-esac
-# ── END TOOL BLOCK ──────────────────────────────────────────────────────────
+if command -v node &>/dev/null; then
+  # Fast guardians only — CodeQL (deep) runs via the MCP tool on demand.
+  FINDINGS=$(node "$PLUGIN_ROOT/mcp-server/cli.js" "$FILE" 2>/dev/null || true)
+else
+  # ── Fallback: direct tool invocation ─────────────────────────────────────
+  EXT="${FILE##*.}"
+  case "$EXT" in
+    py)
+      if command -v bandit &>/dev/null; then
+        FINDINGS=$(bandit -q -f custom \
+          --msg-template "[{severity}] {test_id} line {line}: {msg}" \
+          "$FILE" 2>/dev/null || true)
+      fi
+      ;;
+    js|ts|jsx|tsx)
+      if command -v semgrep &>/dev/null; then
+        FINDINGS=$(semgrep --config=p/javascript --config=p/typescript \
+          --quiet --no-git-ignore \
+          --output-format=text "$FILE" 2>/dev/null || true)
+      fi
+      ;;
+    *)
+      if command -v semgrep &>/dev/null; then
+        FINDINGS=$(semgrep --config=auto --quiet --no-git-ignore \
+          --output-format=text "$FILE" 2>/dev/null || true)
+      fi
+      ;;
+  esac
+fi
 
 if [ -z "$FINDINGS" ]; then
   exit 0
@@ -62,4 +55,5 @@ fi
 echo "SAST FINDINGS for $FILE:"
 echo "$FINDINGS"
 echo ""
-echo "Invoking securecoder-remediator agent to address the above findings."
+echo "Invoke the securecoder-remediator agent to address the above findings."
+echo "For deep analysis (CodeQL), call the securecoder_analyze MCP tool with deep=true."
