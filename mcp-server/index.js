@@ -5,6 +5,7 @@
 
 'use strict';
 
+const fs = require('fs');
 const readline = require('readline');
 const { analyze } = require('./lib/analyze');
 const { enrichPrompt } = require('./lib/enricher');
@@ -17,6 +18,22 @@ const SERVER_INFO = { name: 'securecoder-analysis', version: '0.2.0' };
 const PROTOCOL_VERSION = '2025-06-18';
 
 const log = (msg) => process.stderr.write(`[securecoder] ${msg}\n`);
+
+// Opt-in structured trace log for benchmark/eval runs: when set, every tool
+// call appends its pre-flatten result as one JSON line, so scores (violation
+// counts, retry verdicts, resolved/introduced/persisting) survive alongside
+// the free-text MCP response instead of needing to be re-parsed from it.
+// Calls are already serialized through toolQueue, so appendFileSync is safe.
+const TRACE_LOG = process.env.SECURECODER_TRACE_LOG || null;
+
+function traceLog(record) {
+  if (!TRACE_LOG) return;
+  try {
+    fs.appendFileSync(TRACE_LOG, `${JSON.stringify({ ts: new Date().toISOString(), ...record })}\n`);
+  } catch (err) {
+    log(`trace log write failed: ${err.message}`);
+  }
+}
 
 const TOOLS = [
   {
@@ -105,6 +122,14 @@ async function handleAnalyze(args) {
     log,
   });
 
+  traceLog({
+    tool: 'securecoder_analyze',
+    session: args.session || null,
+    files: args.files,
+    deep: args.deep === true,
+    result,
+  });
+
   const lines = [];
   lines.push(`Analyzers run: ${result.analyzersRun.join(', ') || 'none'}`);
   for (const skip of result.skipped) lines.push(`Skipped ${skip.path}: ${skip.reason}`);
@@ -170,10 +195,12 @@ async function callTool(name, args) {
       return handleAnalyze(args || {});
     case 'securecoder_enrich_prompt': {
       const { enriched, hints } = enrichPrompt((args && args.prompt) || '');
+      traceLog({ tool: 'securecoder_enrich_prompt', prompt: (args && args.prompt) || '', hints, enriched });
       return `Injected constraints:\n${hints.map((h) => `- ${h}`).join('\n')}\n\nEnriched prompt:\n${enriched}`;
     }
     case 'securecoder_reset_session':
       resetSession(args.session);
+      traceLog({ tool: 'securecoder_reset_session', session: args.session });
       return `Session '${args.session}' reset.`;
     case 'securecoder_status':
       return handleStatus(args || {});

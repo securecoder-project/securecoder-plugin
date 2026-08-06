@@ -82,6 +82,8 @@ Place `.securecoder.json` at your repo root (all keys optional; defaults in `mcp
 
 `codeql.query_packs` entries are prepended to the built-in per-language candidates (code-scanning suite, then security-extended fallback). Environment overrides: `CODEQL_BIN`, `SECURECODER_CONFIG`, `PYTHON_BIN`, `NODE_BIN`, `SEMGREP_BIN`, `BANDIT_BIN`, `CLANG_BIN`, `CLANGXX_BIN`, `GOFMT_BIN`.
 
+`SECURECODER_TRACE_LOG` (path to a JSONL file) is a separate, opt-in switch: when set, every `securecoder_analyze`/`securecoder_enrich_prompt`/`securecoder_reset_session` call appends its full structured result as one JSON line, for benchmark/eval runs that need machine-readable scores alongside the transcript. Unset by default; see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#recording-traces-for-benchmarking).
+
 ## Plugin structure
 
 ```
