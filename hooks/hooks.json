@@ -1,28 +1,28 @@
 {
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash -c 'FILE=$(jq -r \".tool_input.file_path // .tool_input.path // empty\"); [ -z \"$FILE\" ] && exit 0; \"${CLAUDE_PLUGIN_ROOT}/bin/run-sast\" \"$FILE\"'",
-            "description": "Run the SecureCoder fast guardian pipeline on any file written or edited by Claude"
-          }
+    "hooks": {
+        "PostToolUse": [
+            {
+                "matcher": "Write|Edit|MultiEdit",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash -c 'FILE=$(jq -r \".tool_input.file_path // .tool_input.path // empty\"); [ -z \"$FILE\" ] && exit 0; \"${CLAUDE_PLUGIN_ROOT}/bin/run-sast\" \"$FILE\"'",
+                        "description": "Run the SecureCoder fast guardian pipeline on any file written or edited by Claude"
+                    }
+                ]
+            }
+        ],
+        "PreToolUse": [
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "bash -c 'CMD=$(jq -r \".tool_input.command // empty\"); echo \"$CMD\" | grep -qiE \"(eval|exec|\\$\\(|`|os\\.system|subprocess\\.call|shell=True)\" && echo \"[securecoder] WARNING: potentially unsafe shell pattern detected in command\" >&2; exit 0'",
+                        "description": "Warn on shell injection patterns in bash commands Claude is about to run"
+                    }
+                ]
+            }
         ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash -c 'CMD=$(jq -r \".tool_input.command // empty\"); echo \"$CMD\" | grep -qiE \"(eval|exec|\\$\\(|`|os\\.system|subprocess\\.call|shell=True)\" && echo \"[securecoder] WARNING: potentially unsafe shell pattern detected in command\" >&2; exit 0'",
-            "description": "Warn on shell injection patterns in bash commands Claude is about to run"
-          }
-        ]
-      }
-    ]
-  }
+    }
 }
