@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# check-bash-command — PreToolUse hook for Bash tool calls.
+# Reads the tool input from stdin (jq), warns on unsafe shell patterns.
+# Exit 0 always so hook chain is never blocked.
+
+CMD=$(jq -r '.tool_input.command // empty')
+[ -z "$CMD" ] && exit 0
+
+if printf '%s' "$CMD" | grep -qiE '(eval|exec|\$\(|os\.system|subprocess\.call|shell=True)'; then
+  echo "[securecoder] WARNING: potentially unsafe shell pattern detected" >&2
+fi
+
+if printf '%s' "$CMD" | grep -qF '`'; then
+  echo "[securecoder] WARNING: backtick command substitution detected" >&2
+fi
+
+exit 0

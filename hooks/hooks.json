@@ -18,7 +18,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "bash -c 'CMD=$(jq -r \".tool_input.command // empty\"); echo \"$CMD\" | grep -qiE \"(eval|exec|\\$\\(|`|os\\.system|subprocess\\.call|shell=True)\" && echo \"[securecoder] WARNING: potentially unsafe shell pattern detected in command\" >&2; exit 0'",
+                        "command": "${CLAUDE_PLUGIN_ROOT}/bin/check-bash-command",
                         "description": "Warn on shell injection patterns in bash commands Claude is about to run"
                     }
                 ]
