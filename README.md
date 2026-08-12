@@ -1,66 +1,74 @@
 # SecureCoder — Claude Code Plugin
 
-Security-aware code generation pipeline for Claude Code. Combines prompt-level constraint injection, post-write SAST feedback, and an iterative remediation agent into a single installable plugin.
+A Claude Code plugin that wraps your coding sessions with a security pipeline. It enriches prompts with OWASP constraints before Claude generates code, runs SAST on every file write, and drops you into a guided remediation loop when violations are found. Analysis is handled by a **zero-dependency Node MCP server** ported from the [SecureCoder](https://github.com/STG-TuDA/SecureCoder) Kotlin engine.
 
-The analysis backend is a **zero-dependency Node MCP server** (`mcp-server/`) ported from the [SecureCoder](https://github.com/STG-TuDA/SecureCoder) Kotlin engine (the same engine behind the IntelliJ plugin): CodeQL orchestration with query-pack fallback and crash-recovery heuristics, syntax hard-reject guardians, semgrep/bandit adapters, per-rule remediation guidance, and retry-policy bookkeeping.
+---
 
-## What it does
+## Requirements
 
-<img src="docs/SecureCoder-Plugin-Architecture.svg" alt="SecureCoder overview" width="900" />
+| Requirement | Why | Install |
+|---|---|---|
+| **Node ≥ 18** | Runs the MCP server (no npm install needed) | ships with most systems; [nodejs.org](https://nodejs.org) otherwise |
+| **jq** | Parses hook payloads | ships with macOS; else `brew install jq` |
+| `semgrep` *(optional)* | Fast OWASP/SAST rules | `pip install semgrep` |
+| `bandit` *(optional)* | Python-specific checks | `pip install bandit` |
+| `codeql` *(optional)* | Deep security analysis | [GitHub CodeQL](https://github.com/github/codeql-cli-binaries/releases) |
 
-## MCP tools (`securecoder-analysis` server)
+The plugin works without any optional tools — it degrades gracefully. Check what's available by asking Claude to call `securecoder_status`.
 
-| Tool | What it does |
-| --- | --- |
-| `securecoder_analyze` | Runs the guardian pipeline on files. Fast guardians always; `deep: true` adds CodeQL (security-extended suites, minutes). Returns violations, per-rule remediation guidance with code snippets, and — given a `session` id — retry-loop verdicts (`continue` / `meta_review` / `hard_limit_exhausted` / `hard_reject` / `clean`). |
-| `securecoder_enrich_prompt` | Heuristic prompt enricher: appends contract-preserving security constraints to a code-generation prompt. |
-| `securecoder_reset_session` | Resets a remediation session's attempt counter. |
-| `securecoder_status` | Reports analyzer availability (codeql/semgrep/bandit/clang/…) and the effective config. |
+---
 
-What was ported from the Kotlin engine, and what maps onto Claude itself:
+## Install
 
-| SecureCoder (Kotlin) | Here |
-| --- | --- |
-| `CodeQLGuardian` / `CodeQLRunner` / `SarifParser` / `LanguageDetector` | `mcp-server/lib/codeql.js`, `sarif.js`, `languages.js` |
-| `{Python,JavaScript,Go,C,Cpp}SyntaxGuardian` (hard-reject) | `mcp-server/lib/syntax.js` |
-| `GuardianExecutor` (parallel run, failure isolation) | `mcp-server/lib/analyze.js` |
-| `FeedbackBuilder` (rule hints, snippets, dedup) | `mcp-server/lib/feedback.js` |
-| `HeuristicPromptEnricher` | `mcp-server/lib/enricher.js` |
-| `GuardianRetryPolicy` + `GuardianRetryDecider` (data prep) | `mcp-server/lib/retry.js` — the *decision* LLM is Claude itself |
-| `WorkflowEngine` generate→analyze→fix loop | Claude Code itself (skill + hook + remediator agent) |
-| `LlmViolationTriage`, `SelfTestLoop` | Claude (the remediator triages findings in-context) |
+From this repository (also serves as its own marketplace):
 
-## Installation
-
-```bash
-# From a local directory (dev/testing)
-claude --plugin-dir ./securecoder-claude-plugin
-
-# After publishing to a marketplace
-/plugin install <your-marketplace>@securecoder
+```shell
+/plugin marketplace add STG-TuDA/securecoder-claude-plugin
+/plugin install securecoder@securecoder-plugin
 ```
 
-Requirements: Node ≥ 18 (bundled server has zero npm dependencies). Optional analyzers picked up automatically if on PATH: `codeql` (with query packs, e.g. `codeql pack download codeql/python-queries`), `semgrep`, `bandit`, `clang`, `gofmt`.
+After review by Anthropic, from the community marketplace:
 
-Check your setup from within Claude Code: ask it to call `securecoder_status`.
+```shell
+/plugin marketplace add anthropics/claude-plugins-community
+/plugin install securecoder@claude-community
+```
 
-Running from a checkout and testing the hooks safely in Claude Code's sandbox: see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+**Try it first** (one session, no install):
+
+```bash
+claude --plugin-dir /path/to/securecoder-claude-plugin
+```
+
+---
+
+## How it works
+
+Three things happen automatically once the plugin is active:
+
+1. **Before Claude writes code** — the `securecoder_enrich_prompt` tool appends security constraints to the generation prompt (no-injection, parameterized queries, safe crypto, etc.).
+2. **After every file write** — a hook runs the fast guardian pipeline (syntax check → semgrep → bandit) and surfaces findings inline.
+3. **When violations appear** — the `securecoder-remediator` agent takes over: it calls `securecoder_analyze`, explains each finding with remediation guidance, applies fixes, and re-analyzes until the session is clean or a retry limit is reached.
+
+For a deep scan (CodeQL), ask Claude: *"run a deep SecureCoder analysis on \<file\>"*.
+
+---
 
 ## Usage
 
-**Automatic**: just use Claude Code normally. The skill auto-invokes on code generation tasks, the hook fires on every file write.
+**Automatic** — just use Claude Code normally. The skill and hooks fire without any extra steps.
 
-**Manual / explicit pipeline**:
+**Explicit secure generation:**
 
 ```
-/securecoder:secure-codegen [optional: security context e.g. "PCI-DSS scope"]
+/securecoder:secure-codegen [optional security context, e.g. "PCI-DSS scope"]
 ```
 
-**Deep scan on demand**: ask Claude to "run a deep SecureCoder analysis on <files>" — it calls `securecoder_analyze` with `deep: true`.
+---
 
 ## Configuration
 
-Place `.securecoder.json` at your repo root (all keys optional; defaults in `mcp-server/lib/config.js`):
+Place `.securecoder.json` at your repo root. All keys are optional:
 
 ```json
 {
@@ -68,60 +76,50 @@ Place `.securecoder.json` at your repo root (all keys optional; defaults in `mcp
   "deep_analyzers": ["codeql"],
   "semgrep_config": "p/owasp-top-ten",
   "exclude_patterns": ["tests/", "node_modules/"],
-  "retry": { "soft_limit": 7, "hard_limit": 14 },
-  "codeql": {
-    "binary": "codeql",
-    "languages": null,
-    "query_packs": { "python": ["my/custom-pack:suite.qls"] },
-    "ram_mb": 2048,
-    "timeout_seconds": 600
-  },
-  "bins": { "python": "python3", "semgrep": "semgrep" }
+  "retry": { "soft_limit": 7, "hard_limit": 14 }
 }
 ```
 
-`codeql.query_packs` entries are prepended to the built-in per-language candidates (code-scanning suite, then security-extended fallback). Environment overrides: `CODEQL_BIN`, `SECURECODER_CONFIG`, `PYTHON_BIN`, `NODE_BIN`, `SEMGREP_BIN`, `BANDIT_BIN`, `CLANG_BIN`, `CLANGXX_BIN`, `GOFMT_BIN`.
+Environment overrides are available for every binary path (`CODEQL_BIN`, `SEMGREP_BIN`, `BANDIT_BIN`, …) and for the config file location (`SECURECODER_CONFIG`).
 
-`SECURECODER_TRACE_LOG` (path to a JSONL file) is a separate, opt-in switch: when set, every `securecoder_analyze`/`securecoder_enrich_prompt`/`securecoder_reset_session` call appends its full structured result as one JSON line, for benchmark/eval runs that need machine-readable scores alongside the transcript. Unset by default; see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#recording-traces-for-benchmarking).
+For benchmarking or CI, set `SECURECODER_TRACE_LOG=/path/to/output.jsonl` — every analysis call appends a structured JSON line with violation counts and retry verdicts.
 
-## Plugin structure
+Full config reference and all defaults: [`mcp-server/lib/config.js`](mcp-server/lib/config.js).
+
+---
+
+## Layout
 
 ```
 securecoder-claude-plugin/
 ├── .claude-plugin/
-│   └── plugin.json                  # manifest + metadata
-├── .mcp.json                        # registers the securecoder-analysis MCP server
+│   ├── plugin.json              # plugin manifest
+│   └── marketplace.json         # lets this repo serve as its own marketplace
+├── .mcp.json                    # registers the securecoder-analysis MCP server
 ├── mcp-server/
-│   ├── index.js                     # MCP stdio server (zero dependencies)
-│   ├── cli.js                       # same pipeline as a CLI, used by the hook
-│   └── lib/                         # ported guardian pipeline (see table above)
-├── skills/
-│   └── secure-codegen/SKILL.md      # constraint injection + self-review
+│   ├── index.js                 # MCP stdio server (zero dependencies)
+│   ├── cli.js                   # same pipeline as CLI, used by the SAST hook
+│   └── lib/                     # guardian pipeline (CodeQL, semgrep, bandit, feedback)
 ├── agents/
-│   └── securecoder-remediator.md    # iterative SAST feedback loop agent
+│   └── securecoder-remediator.md
 ├── hooks/
-│   └── hooks.json                   # PostToolUse (fast SAST) + PreToolUse (shell warn)
+│   └── hooks.json               # PostToolUse (SAST) + PreToolUse (shell safety check)
 ├── bin/
-│   └── run-sast                     # hook adapter → mcp-server/cli.js
-├── .securecoder.json                # example project config
-└── settings.json
+│   ├── run-sast                 # hook adapter → mcp-server/cli.js
+│   └── check-bash-command       # PreToolUse hook: warns on unsafe shell patterns
+├── .securecoder.json            # example project config
+└── docs/
+    └── DEVELOPMENT.md           # running from a checkout, CI runs, trace recording
 ```
 
-## Relationship to the IntelliJ plugin
-
-Both frontends share the same pipeline design. The IntelliJ plugin drives the Kotlin `WorkflowEngine` with its own LLM client; here Claude is the LLM and the agentic loop, and the classical parts of the engine (guardians, feedback construction, retry policy) run in the MCP server. Guardian behavior (query packs, failure heuristics, feedback text) is kept in sync with the Kotlin sources under `SecureCoder/guardian` and `SecureCoder/engine`.
+---
 
 ## Further reading
 
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — running from a checkout, sandboxed hook testing, CI-style non-interactive runs.
-- [docs/semgrep-guardian-comparison.md](docs/semgrep-guardian-comparison.md) — how this pipeline compares to Semgrep's own MCP/hook-based "Guardian" plugin.
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — local dev setup, sandboxed hook testing, non-interactive CI runs, trace recording for benchmarks.
 
-## Publishing
+---
 
-```bash
-# Validate before submitting
-claude plugin validate .
+## License
 
-# Submit to community marketplace
-# → https://claude.ai/settings/plugins/submit
-```
+MIT
