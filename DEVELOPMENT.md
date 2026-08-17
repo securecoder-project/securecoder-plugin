@@ -20,7 +20,7 @@ On first run in a new project, Claude Code will ask you to trust the directory a
 
 ## Testing in a sandbox
 
-This plugin runs a `PostToolUse` hook on every `Write`/`Edit` (`bin/run-sast`, which shells out to `node` and optionally `semgrep`/`bandit`/`codeql`/`clang`/`gofmt`) and a `PreToolUse` hook that inspects Bash commands. Before trusting those hooks in a real project, exercise them in Claude Code's OS-level sandbox so a bug in a hook or a misbehaving analyzer can't touch anything outside the sandboxed scope.
+This plugin runs a `PostToolUse` hook on every `Write`/`Edit` (`scripts/run-sast`, which shells out to `node` and optionally `semgrep`/`bandit`/`codeql`/`clang`/`gofmt`) and a `PreToolUse` hook that inspects Bash commands. Before trusting those hooks in a real project, exercise them in Claude Code's OS-level sandbox so a bug in a hook or a misbehaving analyzer can't touch anything outside the sandboxed scope.
 
 1. Start (or resume) an interactive session, then run:
 
@@ -62,7 +62,7 @@ This plugin runs a `PostToolUse` hook on every `Write`/`Edit` (`bin/run-sast`, w
 
    `--permission-mode` is a separate axis from sandboxing — sandboxing bounds *what* a tool can touch once it runs, permission mode decides *whether* it runs without asking. Useful modes here: `acceptEdits` (auto-accept file edits, still prompts for anything else) or `plan` (nothing executes, good for a dry read of the skill/hook wiring). Avoid `bypassPermissions` / `--dangerously-skip-permissions` for this — that defeats the point of testing hook behavior safely, and Claude Code's own docs restrict it to network-isolated sandboxes.
 
-If a hook misbehaves (e.g. `bin/run-sast` hangs or an analyzer tries to write outside the project), the sandbox is what stops it from being a host-level problem instead of a test failure — check `claude plugin details securecoder` and run with `--debug hooks` to see the hook's stderr for diagnosis.
+If a hook misbehaves (e.g. `scripts/run-sast` hangs or an analyzer tries to write outside the project), the sandbox is what stops it from being a host-level problem instead of a test failure — check `claude plugin details securecoder` and run with `--debug hooks` to see the hook's stderr for diagnosis.
 
 ## Recording traces for benchmarking
 
@@ -78,7 +78,7 @@ At analysis time, join the two: the transcript gives you the conversation (inclu
 
 To get from a pile of `(transcript, trace)` pairs to something browsable, `scripts/docent_ingest.py` converts one pair into a [Docent](https://docent.transluce.org) `AgentRun` and uploads it — the transcript becomes the message history (Claude Code's tool_use/tool_result blocks get reshaped into Docent's `ToolCall`/`ToolMessage`), and the last `securecoder_analyze` record in the trace file becomes `AgentRun.metadata.scores` (final verdict, attempt count, remaining violations), with the full trace kept under `metadata.trace_log`.
 
-Setup (once): a `.venv/` + `requirements.txt` (`docent-python`) live in the repo root — `.venv/` is gitignored, install with `python3 -m venv .venv && ./.venv/bin/python -m pip install -r requirements.txt`. Put your key in a gitignored `.env` as `DOCENT_API_KEY=...` (get one at https://docent.transluce.org/settings/api-keys), then `set -a && source .env && set +a` before running the script.
+Setup (once): a `.venv/` + `requirements.txt` (`docent-python`) live in the repo root — `.venv/` is gitignored, install with `python3 -m venv .venv && ./.venv/bin/python -m pip install -r requirements.txt`. Put your key in a gitignored `.env` as `DOCENT_API_KEY=...` (get one at <https://docent.transluce.org/settings/api-keys>), then `set -a && source .env && set +a` before running the script.
 
 ```bash
 ./.venv/bin/python scripts/docent_ingest.py \

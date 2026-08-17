@@ -7,7 +7,7 @@ A Claude Code plugin that wraps your coding sessions with a security pipeline. I
 ## Requirements
 
 | Requirement | Why | Install |
-|---|---|---|
+| --- | --- | --- |
 | **Node ≥ 18** | Runs the MCP server (no npm install needed) | ships with most systems; [nodejs.org](https://nodejs.org) otherwise |
 | **jq** | Parses hook payloads | ships with macOS; else `brew install jq` |
 | `semgrep` *(optional)* | Fast OWASP/SAST rules | `pip install semgrep` |
@@ -104,7 +104,7 @@ securecoder-claude-plugin/
 │   └── securecoder-remediator.md
 ├── hooks/
 │   └── hooks.json               # PostToolUse (SAST) + PreToolUse (shell safety check)
-├── bin/
+├── scripts/
 │   ├── run-sast                 # hook adapter → mcp-server/cli.js
 │   └── check-bash-command       # PreToolUse hook: warns on unsafe shell patterns
 ├── .securecoder.json            # example project config
@@ -116,7 +116,7 @@ securecoder-claude-plugin/
 
 ## Further reading
 
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — local dev setup, sandboxed hook testing, non-interactive CI runs, trace recording for benchmarks.
+- [DEVELOPMENT.md](DEVELOPMENT.md) — local dev setup, sandboxed hook testing, non-interactive CI runs, trace recording for benchmarks.
 
 ---
 

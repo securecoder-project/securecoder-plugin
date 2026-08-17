@@ -3,7 +3,7 @@
 
 Pairs two inputs produced by a single benchmark task:
   - a Claude Code session transcript (~/.claude/projects/<slug>/<uuid>.jsonl)
-  - a SecureCoder trace log (see SECURECODER_TRACE_LOG in docs/DEVELOPMENT.md)
+  - a SecureCoder trace log (see SECURECODER_TRACE_LOG in DEVELOPMENT.md)
 
 Usage:
   .venv/bin/python scripts/docent_ingest.py \

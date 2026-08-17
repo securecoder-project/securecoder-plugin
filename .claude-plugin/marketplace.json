@@ -1,0 +1,22 @@
+{
+    "id": "securecoder-plugin",
+    "plugins": [
+        {
+            "name": "securecoder",
+            "version": "0.1.0",
+            "description": "An Athene Project by STG at TU Darmstadt - Security-aware code generation for Claude Code; constraint injection, post-write SAST, and iterative remediation in a single plugin.",
+            "author": "parsakaz",
+            "homepage": "https://github.com/STG-TuDA/securecoder-claude-plugin",
+            "keywords": [
+                "security",
+                "sast",
+                "owasp",
+                "code-generation",
+                "remediation",
+                "securecoder",
+                "claude"
+            ],
+            "license": "MIT"
+        }
+    ]
+}

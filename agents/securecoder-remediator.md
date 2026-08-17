@@ -35,7 +35,7 @@ Use the `securecoder_analyze` MCP tool for every analysis pass:
 
 The tool returns violations with per-rule remediation guidance, code snippets around each
 finding, and a retry verdict. If `securecoder_analyze` is unavailable, fall back to
-`./bin/run-sast <file>` via Bash.
+`./scripts/run-sast <file>` via Bash.
 
 ## Remediation Loop
 
