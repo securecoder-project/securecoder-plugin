@@ -1,12 +1,20 @@
 {
-    "id": "securecoder-plugin",
+    "name": "securecoder",
+    "description": "Security-aware code generation plugins for Claude Code by STG at TU Darmstadt.",
+    "owner": {
+        "name": "STG-TuDA"
+    },
     "plugins": [
         {
             "name": "securecoder",
             "version": "0.1.0",
             "description": "An Athene Project by STG at TU Darmstadt - Security-aware code generation for Claude Code; constraint injection, post-write SAST, and iterative remediation in a single plugin.",
-            "author": "parsakaz",
-            "homepage": "https://github.com/STG-TuDA/securecoder-claude-plugin",
+            "author": {
+                "name": "parsakaz",
+                "url": "https://github.com/parsakaz"
+            },
+            "source": "./",
+            "homepage": "https://securecoder-project.github.io/",
             "keywords": [
                 "security",
                 "sast",
