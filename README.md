@@ -47,6 +47,9 @@ Missing analyzers are skipped. Run **`/securecoder doctor`** to see what's insta
 
 ## Install
 
+Step-by-step instructions per agent, plus verification and troubleshooting, are in
+[INSTALL.md](INSTALL.md). The short version:
+
 ### Claude Code
 
 ```shell
@@ -196,6 +199,12 @@ mcp-server/              MCP server and the guardian pipeline (lib/)
 test/, scripts/          Test suite and manifest checks
 dev/benchmark/           Docent trace ingestion for research benchmarks
 ```
+
+## Further reading
+
+- [INSTALL.md](INSTALL.md): installation and usage guide for every agent, configuration reference, troubleshooting
+- [SECURITY.md](SECURITY.md): trust model and vulnerability reporting
+- [CHANGELOG.md](CHANGELOG.md): what changed in each release
 
 ## Development
 

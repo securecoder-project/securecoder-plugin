@@ -45,12 +45,13 @@
     "mcp-server/",
     "opencode/",
     "skills/",
-    "plugin.json",
-    "mcp.json",
     "CHANGELOG.md",
+    "INSTALL.md",
     "LICENSE",
     "README.md",
-    "SECURITY.md"
+    "SECURITY.md",
+    "mcp.json",
+    "plugin.json"
   ],
   "scripts": {
     "test": "node --test",

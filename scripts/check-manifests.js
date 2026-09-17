@@ -158,7 +158,7 @@ for (const file of fs.readdirSync(path.join(ROOT, 'agents')).filter((f) => f.end
 
 // ── repository hygiene ───────────────────────────────────────────────────────
 
-for (const rel of ['LICENSE', 'README.md', 'CHANGELOG.md', 'SECURITY.md', 'bin/securecoder', 'opencode/index.js']) checkPath(rel, 'required file');
+for (const rel of ['LICENSE', 'README.md', 'INSTALL.md', 'CHANGELOG.md', 'SECURITY.md', 'bin/securecoder', 'opencode/index.js']) checkPath(rel, 'required file');
 const changelog = fs.existsSync(path.join(ROOT, 'CHANGELOG.md')) ? fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8') : '';
 if (VERSION && !changelog.includes(`## [${VERSION}]`)) fail(`CHANGELOG.md: no "## [${VERSION}]" section`);
 for (const stale of ['.mcp.json', 'settings.json']) {

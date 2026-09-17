@@ -1,6 +1,6 @@
 # Developing SecureCoder
 
-This guide covers working on the plugin from a checkout: running it in each harness, testing, releasing, and recording benchmark traces. For installation as a user, see the [README](README.md).
+This guide covers working on the plugin from a checkout: running it in each harness, testing, releasing, and recording benchmark traces. For installing and using it as a user, see [INSTALL.md](INSTALL.md).
 
 ## Architecture in one screen
 
