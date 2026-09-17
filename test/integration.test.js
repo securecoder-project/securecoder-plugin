@@ -211,3 +211,42 @@ test('opencode: plugin registers MCP, commands, agent, and scans edits', { skip:
     Object.assign(process.env, saved);
   }
 });
+
+test('install-hooks merges into a harness hook config without touching other entries', () => {
+  const harnessHooks = require('../mcp-server/lib/harness-hooks');
+  const root = makeProject({ files: { '.codex/hooks.json': JSON.stringify({ hooks: { PostToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'echo mine' }] }] }, other: true }) } });
+  const env = cleanEnv();
+  const read = () => JSON.parse(fs.readFileSync(path.join(root, '.codex', 'hooks.json'), 'utf8'));
+
+  const first = harnessHooks.install('codex', { scope: 'project', root, env });
+  assert.deepEqual(first.events, ['PostToolUse', 'PreToolUse']);
+  let data = read();
+  assert.equal(data.other, true, 'unrelated keys survive');
+  assert.equal(data.hooks.PostToolUse.length, 2, 'existing group kept');
+  assert.equal(data.hooks.PostToolUse[0].hooks[0].command, 'echo mine');
+  const ours = data.hooks.PostToolUse[1];
+  assert.equal(ours.matcher, 'Write|Edit|MultiEdit|apply_patch');
+  assert.deepEqual(ours.hooks[0].args, [path.join(ROOT, 'hooks', 'securecoder-hook.js'), 'post-edit']);
+
+  harnessHooks.install('codex', { scope: 'project', root, env });
+  data = read();
+  assert.equal(data.hooks.PostToolUse.length, 2, 'reinstall replaces rather than duplicates');
+
+  const removed = harnessHooks.remove('codex', { scope: 'project', root, env });
+  assert.equal(removed.removed, 2);
+  data = read();
+  assert.deepEqual(Object.keys(data.hooks), ['PostToolUse']);
+  assert.equal(data.hooks.PostToolUse.length, 1);
+  assert.equal(data.hooks.PostToolUse[0].hooks[0].command, 'echo mine');
+
+  assert.throws(() => harnessHooks.install('nope', { scope: 'user', root, env }), /Unknown harness/);
+  assert.throws(() => harnessHooks.hooksFile('codex', { scope: 'local', root, env }), /Unknown scope/);
+  assert.equal(harnessHooks.hooksFile('codex', { scope: 'user', root, env: { ...env, CODEX_HOME: '/tmp/cx' } }), path.join('/tmp/cx', 'hooks.json'));
+});
+
+test('install-hooks refuses to clobber a malformed harness hook config', () => {
+  const harnessHooks = require('../mcp-server/lib/harness-hooks');
+  const root = makeProject({ files: { '.codex/hooks.json': '{ broken' } });
+  assert.throws(() => harnessHooks.install('codex', { scope: 'project', root, env: cleanEnv() }), /not valid JSON/);
+  assert.equal(fs.readFileSync(path.join(root, '.codex', 'hooks.json'), 'utf8'), '{ broken');
+});

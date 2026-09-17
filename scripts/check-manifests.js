@@ -70,6 +70,11 @@ for (const [rel, m] of Object.entries(manifests)) {
 
 const agentPlugins = manifests['plugin.json'];
 if (agentPlugins) {
+  // Codex only runs plugin hooks it can find; declare them explicitly rather
+  // than relying on default discovery for the portable layout.
+  const openai = (agentPlugins.extensions || {})['com.openai'] || {};
+  if (!openai.hooks) fail('plugin.json: extensions."com.openai".hooks must point at the hook config');
+  else checkPath(String(openai.hooks).replace(/^\.\//, ''), 'plugin.json extensions."com.openai".hooks');
   const allowed = new Set(['$schema', 'name', 'version', 'description', 'author', 'homepage', 'repository', 'license', 'keywords', 'extensions']);
   for (const key of Object.keys(agentPlugins)) if (!allowed.has(key)) fail(`plugin.json: "${key}" is not an Agent Plugins 1.0 field (move it under extensions)`);
   if (agentPlugins.$schema !== 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json') fail('plugin.json: unexpected $schema');

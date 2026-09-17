@@ -10,16 +10,29 @@
   "homepage": "https://securecoder-project.github.io/",
   "repository": "https://github.com/parsakaz/securecoder-claude-plugin",
   "license": "MIT",
-  "keywords": ["security", "sast", "owasp", "codeql", "semgrep", "bandit", "remediation", "code-generation"],
+  "keywords": [
+    "security",
+    "sast",
+    "owasp",
+    "codeql",
+    "semgrep",
+    "bandit",
+    "remediation",
+    "code-generation"
+  ],
   "extensions": {
     "com.openai": {
+      "hooks": "./hooks/hooks.json",
       "interface": {
         "displayName": "SecureCoder",
         "shortDescription": "Security checks and guided fixes for the code Codex writes",
         "longDescription": "SecureCoder adds security constraints before code generation, scans every edited file with fast static analyzers (syntax, semgrep, bandit), offers deep CodeQL analysis on demand, and drives a fix-and-recheck remediation loop with retry limits. Run $securecoder:securecoder to view and change settings.",
         "developerName": "STG, TU Darmstadt",
         "category": "Coding",
-        "capabilities": ["Read", "Write"],
+        "capabilities": [
+          "Read",
+          "Write"
+        ],
         "websiteURL": "https://securecoder-project.github.io/",
         "defaultPrompt": [
           "Use SecureCoder to scan the files I changed and fix any security findings.",

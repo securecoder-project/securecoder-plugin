@@ -93,8 +93,24 @@ codex plugin list      # expect: installed, enabled
 codex mcp list         # expect: securecoder-analysis, enabled
 ```
 
-Then start `codex` and **approve the hooks under `/hooks`**. Codex will not run plugin hooks until
-you trust them, so the post-edit scan stays silent until you do.
+Then start `codex` and **approve the hooks under `/hooks`**. Codex will not run hooks until you
+trust them, so the post-edit scan stays silent until you do.
+
+**If the plugin view says "No plugin hooks"**, this build of Codex is not loading plugin-bundled
+hooks. Install them as your own Codex hooks instead, which every build supports:
+
+```bash
+node /path/to/securecoder/bin/securecoder install-hooks codex              # ~/.codex/hooks.json
+node /path/to/securecoder/bin/securecoder install-hooks codex --scope project   # <repo>/.codex/hooks.json
+```
+
+That writes the same two hooks with absolute paths, leaving any hooks you already have alone.
+Restart Codex and approve them under `/hooks`. If a later Codex release starts loading the
+plugin's own hooks, remove these so the scan does not run twice:
+
+```bash
+node /path/to/securecoder/bin/securecoder uninstall-hooks codex
+```
 
 Prefer this git-backed install over a local directory: Codex copies a local marketplace folder
 wholesale into `~/.codex/plugins/cache/`, including untracked and gitignored files such as `.env`.
@@ -286,6 +302,8 @@ securecoder scan --deep                         # CodeQL over files changed sinc
 securecoder config set mode enforce
 securecoder config add exclude_patterns 'vendor/'
 securecoder config keys                         # every setting, allowed values, defaults
+securecoder install-hooks codex                  # hooks into ~/.codex/hooks.json (see Codex install)
+securecoder uninstall-hooks codex
 ```
 
 Elsewhere, run it as `node /path/to/securecoder/bin/securecoder …`. The CLI is the only way
@@ -362,6 +380,7 @@ off`), which leaves everything installed but idle.
 | Symptom | Cause and fix |
 | --- | --- |
 | Installed, but the agent has no `securecoder_*` tools | The installed copy predates 0.2.0, or the install is stale. Update the marketplace and reinstall, then confirm `securecoder --version` and the version in `plugin list` are both 0.2.0. |
+| Codex plugin view says "No plugin hooks" | That build does not load plugin-bundled hooks. Run `securecoder install-hooks codex`, restart Codex, and approve them under `/hooks`. Remove them with `uninstall-hooks codex` if plugin hooks start working, to avoid scanning twice. |
 | Nothing happens after the agent writes a file | Is it on? `/securecoder status` shows `enabled` and `hooks.post_edit`. In Codex, hooks need approval under `/hooks`. In VS Code, hooks are not supported yet. Also check the path is not covered by `exclude_patterns`. |
 | No findings on code you know is vulnerable | Probably no analyzer installed: `/securecoder doctor`. The syntax guardians alone only catch code that does not parse. Also check `severity_threshold`. |
 | Findings appear but the agent ignores them | `advisory` mode only informs. Use `/securecoder mode enforce` to block the turn until they are addressed (Claude Code and Codex). |

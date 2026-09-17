@@ -31,9 +31,13 @@ Usage:
   securecoder config init [--force]           Write a starter config (default scope: project)
   securecoder config gitignore                Add .securecoder.local.json to .gitignore
   securecoder config path                     Print config file locations
+  securecoder install-hooks <harness>         Install the hooks into a harness's own hook config
+                                              (codex; use when plugin hooks don't load)
+  securecoder uninstall-hooks <harness>       Remove them again
 
 Options:
-  --scope user|project|local   Where to write (default: local inside a project, user elsewhere)
+  --scope user|project|local   Where to write (default: local inside a project, user elsewhere;
+                               install-hooks takes user or project and defaults to user)
   --project-root DIR           Project to operate on (default: nearest .git/.securecoder.json)
   --json                       Machine-readable output
   -h, --help                   Show this help
@@ -144,6 +148,28 @@ async function scan(opts) {
   return result.violations.length ? 1 : 0;
 }
 
+async function installHooks(opts, action) {
+  const harnessHooks = require(path.join(lib, 'harness-hooks.js'));
+  const [harness] = opts.positional;
+  if (!harness) throw new UsageError(`${action === 'install' ? 'install' : 'uninstall'}-hooks needs a harness: ${harnessHooks.HARNESSES.join(', ')}`);
+  const { root } = context(opts);
+  const scope = opts.scope || 'user';
+  if (scope === 'local') throw new UsageError('install-hooks supports --scope user or project');
+  if (action === 'install') {
+    const result = harnessHooks.install(harness, { scope, root });
+    return output(opts, result, [
+      `✓ Installed SecureCoder hooks into ${result.file} (${result.events.join(', ')})`,
+      harness === 'codex'
+        ? 'Restart Codex and approve them under /hooks; Codex requires hook trust before running them.'
+        : '',
+    ].filter(Boolean).join('\n'));
+  }
+  const result = harnessHooks.remove(harness, { scope, root });
+  return output(opts, result, result.removed
+    ? `✓ Removed ${result.removed} SecureCoder hook entr${result.removed === 1 ? 'y' : 'ies'} from ${result.file}`
+    : `No SecureCoder hook entries in ${result.file}`);
+}
+
 function resolveScope(opts, cwd) {
   return opts.scope || settings.defaultScope(cwd);
 }
@@ -217,6 +243,8 @@ async function main() {
     case 'doctor': return doctor(opts);
     case 'scan': return scan(opts);
     case 'config': return config(opts);
+    case 'install-hooks': return installHooks(opts, 'install');
+    case 'uninstall-hooks': return installHooks(opts, 'uninstall');
     default: throw new UsageError(`Unknown command "${command}"`);
   }
 }

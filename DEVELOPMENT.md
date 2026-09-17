@@ -64,6 +64,10 @@ Codex starts plugin MCP servers with the working directory inside the plugin cac
 the portable `mcp.json` uses a plugin-relative `cwd` and the server derives the project from MCP
 roots, harness environment variables, or absolute file paths.
 
+Plugin hooks are declared in `extensions."com.openai".hooks`. Codex 0.154.0 reports the
+`plugin_hooks` feature as `removed` and shows "No plugin hooks" for any plugin, so on that build
+install them as user or project hooks instead: `securecoder install-hooks codex`.
+
 ### Cursor
 
 Cursor discovers local plugins under `~/.cursor/plugins/local/`. A symlink keeps it pointed at

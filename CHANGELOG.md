@@ -11,7 +11,7 @@ All notable changes to SecureCoder are documented here. The format follows
 - **Multi-harness support.** One repository now installs into Claude Code, Codex, Cursor, and
   OpenCode. GitHub Copilot, VS Code, and Kiro get skills and MCP through the
   [Agent Plugins 1.0](https://agent-plugins.org) root manifest (`plugin.json`, `mcp.json`).
-  - Codex: `plugin.json` (`extensions."com.openai"` interface metadata), shared
+  - Codex: `plugin.json` (`extensions."com.openai"` hooks and interface metadata), shared
     `hooks/hooks.json` with `apply_patch` support, `.agents/plugins/marketplace.json`.
   - Cursor: `.cursor-plugin/plugin.json`, `hooks/cursor.json` (`postToolUse`, `beforeShellExecution`).
   - OpenCode: native plugin (`opencode/index.js`) that registers the MCP server, the
@@ -32,6 +32,9 @@ All notable changes to SecureCoder are documented here. The format follows
 - MCP server: read-only `securecoder_config` tool, tool annotations, `structuredContent` for
   analysis results, MCP roots support for workspace detection, protocol version negotiation, and
   server `instructions`.
+- `securecoder install-hooks codex` / `uninstall-hooks codex`: installs the post-edit and
+  shell-guard hooks into `~/.codex/hooks.json` or `<repo>/.codex/hooks.json` for Codex builds that
+  do not load plugin-bundled hooks. Merging is idempotent and leaves your own hooks untouched.
 - Test suite (`npm test`, zero dependencies), manifest consistency checker, and CI on Linux,
   macOS, and Windows.
 
