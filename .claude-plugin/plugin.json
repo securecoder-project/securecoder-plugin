@@ -1,13 +1,22 @@
 {
-    "name": "securecoder",
-    "description": "Security-aware code generation pipeline: constraint injection, static analysis feedback, and iterative remediation for Claude Code.",
-    "version": "0.1.0",
-    "author": {
-        "name": "parsakaz",
-        "url": "https://parsakaz.github.io"
-    },
-    "homepage": "https://github.com/parsakaz/securecoder-plugin",
-    "repository": "https://github.com/parsakaz/securecoder-plugin",
-    "license": "MIT",
-    "keywords": ["security", "sast", "code-generation", "owasp", "pipeline"]
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "securecoder",
+  "displayName": "SecureCoder",
+  "version": "0.2.0",
+  "description": "Security-aware code generation: contract-preserving security constraints before generation, SAST on every edit (syntax, semgrep, bandit; CodeQL on demand), and a guided remediation loop. Configure with /securecoder:securecoder.",
+  "author": {
+    "name": "parsakaz",
+    "url": "https://github.com/parsakaz"
+  },
+  "homepage": "https://securecoder-project.github.io/",
+  "repository": "https://github.com/parsakaz/securecoder-claude-plugin",
+  "license": "MIT",
+  "keywords": ["security", "sast", "owasp", "codeql", "semgrep", "bandit", "remediation", "code-generation"],
+  "mcpServers": {
+    "securecoder-analysis": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/index.js"]
+    }
+  }
 }

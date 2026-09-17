@@ -1,30 +1,26 @@
 {
-    "name": "securecoder",
-    "description": "Security-aware code generation plugins for Claude Code by STG at TU Darmstadt.",
-    "owner": {
-        "name": "STG-TuDA"
-    },
-    "plugins": [
-        {
-            "name": "securecoder",
-            "version": "0.1.0",
-            "description": "An Athene Project by STG at TU Darmstadt - Security-aware code generation for Claude Code; constraint injection, post-write SAST, and iterative remediation in a single plugin.",
-            "author": {
-                "name": "parsakaz",
-                "url": "https://github.com/parsakaz"
-            },
-            "source": "./",
-            "homepage": "https://securecoder-project.github.io/",
-            "keywords": [
-                "security",
-                "sast",
-                "owasp",
-                "code-generation",
-                "remediation",
-                "securecoder",
-                "claude"
-            ],
-            "license": "MIT"
-        }
-    ]
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "securecoder",
+  "description": "SecureCoder security-aware code generation plugin by the Software Technology Group (STG), TU Darmstadt.",
+  "owner": {
+    "name": "parsakaz",
+    "url": "https://github.com/parsakaz"
+  },
+  "plugins": [
+    {
+      "name": "securecoder",
+      "version": "0.2.0",
+      "description": "An ATHENE project by STG at TU Darmstadt. Security-aware code generation: constraint injection, post-edit SAST, and iterative remediation.",
+      "author": {
+        "name": "parsakaz",
+        "url": "https://github.com/parsakaz"
+      },
+      "source": "./",
+      "category": "security",
+      "homepage": "https://securecoder-project.github.io/",
+      "repository": "https://github.com/parsakaz/securecoder-claude-plugin",
+      "license": "MIT",
+      "keywords": ["security", "sast", "owasp", "codeql", "semgrep", "bandit", "remediation", "code-generation"]
+    }
+  ]
 }

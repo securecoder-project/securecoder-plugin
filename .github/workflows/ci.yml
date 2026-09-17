@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [18, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run tests
+        run: npm test
+        env:
+          PYTHON_BIN: python
+
+  manifests:
+    name: Manifests and schemas
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Cross-harness consistency
+        run: node scripts/check-manifests.js
+      - name: Claude Code plugin and marketplace (strict)
+        run: |
+          npx -y @anthropic-ai/claude-code plugin validate .claude-plugin/plugin.json --strict
+          npx -y @anthropic-ai/claude-code plugin validate .claude-plugin/marketplace.json --strict
+      - name: Agent Plugins 1.0 schemas
+        run: |
+          curl -fsSL https://agent-plugins.org/schemas/1.0.0/plugin.schema.json -o "$RUNNER_TEMP/plugin.schema.json"
+          curl -fsSL https://agent-plugins.org/schemas/1.0.0/mcp.schema.json -o "$RUNNER_TEMP/mcp.schema.json"
+          npx -y -p ajv-cli@5 -p ajv-formats@3 ajv validate --spec=draft2020 -c ajv-formats --strict=false -s "$RUNNER_TEMP/plugin.schema.json" -d plugin.json
+          npx -y -p ajv-cli@5 -p ajv-formats@3 ajv validate --spec=draft2020 -c ajv-formats --strict=false -s "$RUNNER_TEMP/mcp.schema.json" -d mcp.json
+
+  analyzers:
+    name: Real analyzers (semgrep, bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install analyzers
+        run: pipx install semgrep && pipx install bandit
+      - name: Scan a known-vulnerable file
+        run: |
+          mkdir -p "$RUNNER_TEMP/proj" && cd "$RUNNER_TEMP/proj" && git init -q
+          printf 'import os\n\ndef archive(d):\n    os.system(f"tar czf b.tgz {d}")\n' > app.py
+          set +e
+          node "$GITHUB_WORKSPACE/bin/securecoder" scan app.py | tee scan.txt
+          status=${PIPESTATUS[0]}
+          set -e
+          test "$status" -eq 1
+          grep -q 'B605' scan.txt

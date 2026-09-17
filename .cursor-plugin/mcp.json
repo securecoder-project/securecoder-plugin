@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "securecoder-analysis": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CURSOR_PLUGIN_ROOT}/mcp-server/index.js"]
+    }
+  }
+}

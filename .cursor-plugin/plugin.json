@@ -1,0 +1,17 @@
+{
+  "name": "securecoder",
+  "version": "0.2.0",
+  "description": "Security-aware code generation: contract-preserving security constraints, SAST on every edit (syntax, semgrep, bandit; CodeQL on demand), and a guided remediation loop.",
+  "author": {
+    "name": "parsakaz",
+    "url": "https://github.com/parsakaz"
+  },
+  "homepage": "https://securecoder-project.github.io/",
+  "repository": "https://github.com/parsakaz/securecoder-claude-plugin",
+  "license": "MIT",
+  "keywords": ["security", "sast", "owasp", "codeql", "semgrep", "bandit", "remediation", "code-generation"],
+  "skills": "./skills/",
+  "agents": "./agents/",
+  "hooks": "./hooks/cursor.json",
+  "mcpServers": "./.cursor-plugin/mcp.json"
+}

@@ -7,3 +7,6 @@ node_modules/
 .venv/
 
 docs/
+# SecureCoder personal settings and benchmark traces
+.securecoder.local.json
+traces/
