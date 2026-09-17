@@ -1,0 +1,33 @@
+{
+  "_comment": "Example SecureCoder project config. Copy to .securecoder.json at your repo root, or run `securecoder config init`. All keys are optional. List every key with `securecoder config keys`. Executable paths (bins.*, codeql.binary) and trace_log are honored only in user config (~/.config/securecoder/config.json) or environment variables.",
+  "enabled": true,
+  "mode": "advisory",
+  "severity_threshold": "LOW",
+  "analyzers": ["syntax", "semgrep", "bandit"],
+  "deep_analyzers": ["codeql"],
+  "semgrep_config": "p/owasp-top-ten",
+  "exclude_patterns": [
+    "tests/",
+    "*.test.js",
+    "*.test.ts",
+    "*.spec.*",
+    "migrations/",
+    "node_modules/",
+    "__pycache__/"
+  ],
+  "retry": {
+    "soft_limit": 7,
+    "hard_limit": 14
+  },
+  "hooks": {
+    "post_edit": true,
+    "shell_guard": true
+  },
+  "codeql": {
+    "languages": null,
+    "query_packs": {},
+    "threads": 1,
+    "ram_mb": 2048,
+    "timeout_seconds": 600
+  }
+}

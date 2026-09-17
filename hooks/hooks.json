@@ -1,28 +1,30 @@
 {
-    "hooks": {
-        "PostToolUse": [
-            {
-                "matcher": "Write|Edit|MultiEdit",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "bash -c 'FILE=$(jq -r \".tool_input.file_path // .tool_input.path // empty\"); [ -z \"$FILE\" ] && exit 0; \"${CLAUDE_PLUGIN_ROOT}/scripts/run-sast\" \"$FILE\"'",
-                        "description": "Run the SecureCoder fast guardian pipeline on any file written or edited by Claude"
-                    }
-                ]
-            }
-        ],
-        "PreToolUse": [
-            {
-                "matcher": "Bash",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "${CLAUDE_PLUGIN_ROOT}/scripts/check-bash-command",
-                        "description": "Warn on shell injection patterns in bash commands Claude is about to run"
-                    }
-                ]
-            }
+  "description": "SecureCoder hooks for Claude Code and Codex: fast SAST on edited files, and a high-signal shell command guard. Both read .securecoder.json settings and do nothing when SecureCoder is disabled.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/securecoder-hook.js\" post-edit",
+            "timeout": 180,
+            "statusMessage": "SecureCoder: scanning edited files"
+          }
         ]
-    }
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/securecoder-hook.js\" pre-shell",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
 }

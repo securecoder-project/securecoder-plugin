@@ -1,0 +1,236 @@
+#!/usr/bin/env node
+// securecoder: command-line interface to the SecureCoder guardian pipeline and
+// settings. Claude Code puts a plugin's bin/ on PATH; on other harnesses run
+// it as `node <plugin-root>/bin/securecoder`.
+
+'use strict';
+
+const path = require('path');
+const { execFileSync } = require('child_process');
+
+const lib = path.join(__dirname, '..', 'mcp-server', 'lib');
+const settings = require(path.join(lib, 'settings.js'));
+const report = require(path.join(lib, 'report.js'));
+const { VERSION } = require(path.join(lib, 'version.js'));
+
+const USAGE = `SecureCoder ${VERSION}
+
+Usage:
+  securecoder status                          Settings dashboard with analyzer availability
+  securecoder doctor                          Check analyzers and configuration, with install hints
+  securecoder scan [--deep] [--changed] [files...]
+                                              Analyze files (default: git-changed files)
+  securecoder config show                     Same as status
+  securecoder config keys                     List every setting, allowed values, and defaults
+  securecoder config get <key>
+  securecoder config set <key> <value>
+  securecoder config add <key> <item...>      Add entries to a list setting
+  securecoder config remove <key> <item...>   Remove entries from a list setting
+  securecoder config unset <key>              Remove the key from one scope
+  securecoder config reset                    Remove every setting from one scope
+  securecoder config init [--force]           Write a starter config (default scope: project)
+  securecoder config gitignore                Add .securecoder.local.json to .gitignore
+  securecoder config path                     Print config file locations
+
+Options:
+  --scope user|project|local   Where to write (default: local inside a project, user elsewhere)
+  --project-root DIR           Project to operate on (default: nearest .git/.securecoder.json)
+  --json                       Machine-readable output
+  -h, --help                   Show this help
+  -v, --version                Print the version
+
+Exit codes: 0 success, 1 findings at or above the threshold (scan), 2 usage or validation error.`;
+
+class UsageError extends Error {}
+
+function parseArgs(argv) {
+  const opts = { positional: [], json: false, deep: false, force: false, changed: false, scope: null, projectRoot: null };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    const next = () => {
+      if (i + 1 >= argv.length) throw new UsageError(`${arg} needs a value`);
+      return argv[++i];
+    };
+    if (arg === '--json') opts.json = true;
+    else if (arg === '--deep') opts.deep = true;
+    else if (arg === '--force') opts.force = true;
+    else if (arg === '--changed') opts.changed = true;
+    else if (arg === '--scope') opts.scope = next();
+    else if (arg.startsWith('--scope=')) opts.scope = arg.slice('--scope='.length);
+    else if (arg === '--project-root') opts.projectRoot = next();
+    else if (arg.startsWith('--project-root=')) opts.projectRoot = arg.slice('--project-root='.length);
+    else if (arg === '-h' || arg === '--help') opts.help = true;
+    else if (arg === '-v' || arg === '--version') opts.version = true;
+    else if (arg === '--') opts.positional.push(...argv.slice(i + 1)), (i = argv.length);
+    else if (arg.startsWith('--')) throw new UsageError(`Unknown option ${arg}`);
+    else opts.positional.push(arg);
+  }
+  return opts;
+}
+
+function output(opts, data, text) {
+  process.stdout.write(`${opts.json ? JSON.stringify(data, null, 2) : text}\n`);
+}
+
+function context(opts) {
+  const cwd = opts.projectRoot ? path.resolve(opts.projectRoot) : process.cwd();
+  const root = opts.projectRoot ? cwd : settings.findProjectRoot(cwd);
+  return { cwd, root };
+}
+
+function cliCommand() {
+  return `node "${path.resolve(__filename)}"`;
+}
+
+async function status(opts) {
+  const { checkTools } = require(path.join(lib, 'doctor.js'));
+  const { cwd, root } = context(opts);
+  const resolved = settings.resolve(cwd, { root });
+  const tools = await checkTools(resolved.effective);
+  output(opts, { version: VERSION, ...resolved, tools }, report.renderDashboard(resolved, tools, { cliCommand: cliCommand() }));
+}
+
+async function doctor(opts) {
+  const { checkTools, nodeVersionOk } = require(path.join(lib, 'doctor.js'));
+  const { cwd, root } = context(opts);
+  const resolved = settings.resolve(cwd, { root });
+  const tools = await checkTools(resolved.effective);
+  const node = nodeVersionOk();
+  output(opts, { version: VERSION, node, tools, files: resolved.files, warnings: resolved.warnings }, report.renderDoctor(resolved, tools, node));
+}
+
+function gitChangedFiles(root) {
+  const run = (args) => {
+    try {
+      return execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+        .split('\n').map((l) => l.trim()).filter(Boolean);
+    } catch {
+      return null;
+    }
+  };
+  const tracked = run(['diff', '--name-only', '--diff-filter=ACMR', 'HEAD']);
+  if (tracked === null) throw new UsageError('No files given and this is not a git repository with a HEAD commit. Pass file paths to scan.');
+  const untracked = run(['ls-files', '--others', '--exclude-standard']) || [];
+  return [...new Set([...tracked, ...untracked])].map((f) => path.join(root, f));
+}
+
+async function scan(opts) {
+  const { analyze } = require(path.join(lib, 'analyze.js'));
+  const { cwd, root } = context(opts);
+  const files = opts.positional.length && !opts.changed
+    ? opts.positional.map((f) => path.resolve(cwd, f))
+    : gitChangedFiles(root);
+  if (files.length === 0) {
+    output(opts, { violations: [], files: [] }, 'No changed files to scan.');
+    return 0;
+  }
+  const result = await analyze({
+    filePaths: files,
+    projectRoot: root,
+    includeDeep: opts.deep,
+    log: (m) => process.stderr.write(`[securecoder] ${m}\n`),
+  });
+  const lines = [];
+  lines.push(`Analyzers run: ${result.analyzersRun.join(', ') || 'none'}`);
+  for (const s of result.skipped) lines.push(`Skipped ${s.path}: ${s.reason}`);
+  if (result.violations.length) {
+    lines.push(report.renderFindings(result));
+  } else {
+    lines.push(`CLEAN: no findings at or above ${result.threshold}${result.belowThreshold ? ` (${result.belowThreshold} below threshold)` : ''}.`);
+    for (const f of result.failures) lines.push(`(Analyzer ${f.guardian} failed: ${f.message.split('\n')[0]})`);
+  }
+  const json = { ...result, violations: result.violations.map(({ raw, ...v }) => v) };
+  output(opts, json, lines.join('\n'));
+  return result.violations.length ? 1 : 0;
+}
+
+function resolveScope(opts, cwd) {
+  return opts.scope || settings.defaultScope(cwd);
+}
+
+async function config(opts) {
+  const [action = 'show', key, ...values] = opts.positional;
+  const { cwd, root } = context(opts);
+  const writeOpts = () => ({ scope: resolveScope(opts, cwd), cwd, root });
+
+  switch (action) {
+    case 'show':
+    case 'status':
+      return status({ ...opts, positional: [] });
+    case 'keys':
+      return output(opts, settings.SCHEMA, report.renderKeys());
+    case 'path': {
+      const resolved = settings.resolve(cwd, { root });
+      return output(opts, { root: resolved.root, files: resolved.files },
+        [`project root: ${resolved.root}`, ...Object.entries(resolved.files).map(([s, f]) => `${s}: ${f.path}${f.exists ? '' : ' (not created)'}`)].join('\n'));
+    }
+    case 'get': {
+      if (!key) throw new UsageError('config get needs a key');
+      settings.requireKey(key);
+      const canonical = settings.canonicalKey(key);
+      const { value, source } = settings.resolve(cwd, { root }).values[canonical];
+      return output(opts, { key: canonical, value, source }, `${canonical} = ${settings.formatValue(value)} (${source})`);
+    }
+    case 'set': {
+      if (!key || values.length === 0) throw new UsageError('config set needs a key and a value');
+      const result = settings.setFromText(key, values.join(' '), writeOpts());
+      return output(opts, result, report.renderChange(result));
+    }
+    case 'add':
+    case 'remove': {
+      if (!key || values.length === 0) throw new UsageError(`config ${action} needs a key and at least one item`);
+      const items = values.flatMap((v) => v.split(',')).map((v) => v.trim()).filter(Boolean);
+      const result = settings.modifyList(key, action === 'add' ? { add: items } : { remove: items }, writeOpts());
+      return output(opts, result, report.renderChange(result));
+    }
+    case 'unset': {
+      if (!key) throw new UsageError('config unset needs a key');
+      const result = settings.unset(key, writeOpts());
+      return output(opts, result, report.renderChange(result));
+    }
+    case 'reset': {
+      if (!opts.scope) throw new UsageError('config reset needs an explicit --scope (user, project, or local)');
+      const result = settings.reset(writeOpts());
+      return output(opts, result, report.renderChange(result));
+    }
+    case 'init': {
+      const result = settings.init({ scope: opts.scope || 'project', cwd, root, force: opts.force });
+      return output(opts, result, `✓ Wrote ${result.scope} config: ${result.file}`);
+    }
+    case 'gitignore': {
+      const result = settings.ensureLocalGitignored(root);
+      return output(opts, result, result.changed ? `✓ Added .securecoder.local.json to ${result.file}` : `.securecoder.local.json is already ignored in ${result.file}`);
+    }
+    default:
+      throw new UsageError(`Unknown config action "${action}"`);
+  }
+}
+
+async function main() {
+  const opts = parseArgs(process.argv.slice(2));
+  if (opts.version) return output(opts, { version: VERSION }, VERSION);
+  const [command, ...rest] = opts.positional;
+  if (opts.help || !command || command === 'help') return output({ json: false }, null, USAGE);
+  opts.positional = rest;
+  switch (command) {
+    case 'status': return status(opts);
+    case 'doctor': return doctor(opts);
+    case 'scan': return scan(opts);
+    case 'config': return config(opts);
+    default: throw new UsageError(`Unknown command "${command}"`);
+  }
+}
+
+main().then(
+  (code) => { process.exitCode = typeof code === 'number' ? code : 0; },
+  (err) => {
+    if (err instanceof UsageError || err instanceof settings.SettingsError) {
+      process.stderr.write(`securecoder: ${err.message}\n`);
+      if (err instanceof UsageError) process.stderr.write('Run "securecoder --help" for usage.\n');
+      process.exitCode = 2;
+    } else {
+      process.stderr.write(`securecoder: ${err && err.stack ? err.stack : err}\n`);
+      process.exitCode = 1;
+    }
+  },
+);

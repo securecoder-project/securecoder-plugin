@@ -1,99 +1,90 @@
 ---
-description: >
-    Security-aware code generation. Auto-invoked whenever writing, refactoring, or reviewing
-    code — injects security constraints before generation and attaches SAST findings after.
-    Use explicitly via /securecoder:secure-codegen to trigger the full pipeline manually.
+name: secure-codegen
+description: Security-aware code generation. Use whenever writing, refactoring, or reviewing code that handles untrusted input, authentication, secrets, cryptography, file paths, shell or SQL execution, deserialization, or network requests. Injects security constraints before generation and runs SecureCoder analysis after.
+argument-hint: "[extra security requirement, e.g. \"PCI-DSS scope\" or \"no outbound network calls\"]"
 ---
 
-# SecureCoder: Secure Code Generation Skill
+# SecureCoder: secure code generation
 
-You are generating code with security as a first-class constraint, not an afterthought.
+Treat security as a first-class requirement of the task.
 
-## Pre-Generation Constraint Injection
+Extra security context from the user (may be empty): $ARGUMENTS
 
-If the `securecoder_enrich_prompt` MCP tool is available, pass the user's task description
-through it first and honor every injected constraint — they are contract-preserving rules
-(keep names, signatures, sync/async behavior, and requested algorithms exact; fix only the
-unsafe part).
+Enforce any extra context as a hard requirement, for example "FIPS 140-2 algorithms only",
+"PCI-DSS scope", or "no outbound network calls".
 
-Then, before writing ANY code, reason through the following security properties for the task at hand:
+## 1. Before writing code
 
-### Threat Modelling (brief, inline)
+If the `securecoder_enrich_prompt` MCP tool is available, pass the task description through it
+and honor every constraint it returns. The constraints preserve the contract: keep names,
+signatures, sync/async behavior, and requested algorithms exactly, and change only the unsafe part.
 
-- What is the trust boundary for this code? (user input? external API? filesystem?)
-- What's the worst-case exploitation if this code has a bug? (RCE, data leak, privilege escalation, DoS?)
-- Which OWASP Top 10 categories are relevant here?
+Then do a short inline threat model:
 
-### Mandatory Constraints by Code Category
+- Where is the trust boundary (user input, external API, filesystem, environment)?
+- What is the worst outcome if this code is wrong (RCE, data leak, privilege escalation, DoS)?
+- Which OWASP Top 10 / CWE categories apply?
 
-**Input handling / parsing**
+## 2. Constraints by code category
 
-- All external input MUST be validated and sanitized before use
-- Prefer allowlists over denylists
-- Never pass raw user input to shell commands, SQL, or eval-equivalent calls
-- Use parameterized queries / prepared statements, no string interpolation into queries
+**Input handling and parsing**
+- Validate external input at the trust boundary. Prefer allowlists over denylists.
+- Never pass raw input to a shell, SQL, `eval`, a template engine, or a file path.
+- Use parameterized queries or prepared statements. Never interpolate into queries.
 
-**Authentication / authorization**
+**Authentication and authorization**
+- Fail closed: deny by default, grant explicitly.
+- Use established libraries for crypto and password hashing (libsodium, argon2, bcrypt). Never
+  write custom crypto.
+- Keep secrets out of source code. Read them from the environment or a secret manager.
 
-- Fail closed: deny by default, grant explicitly
-- Do not roll custom crypto — use established libraries (libsodium, bcrypt, argon2, etc.)
-- Secrets (tokens, passwords, keys) never in source code, env vars or secret manager only
+**Memory and resource safety** (C, C++, unsafe Rust)
+- Give every `unsafe` block a SAFETY comment stating the invariant.
+- Prefer bounded operations. Flag unbounded loops and allocations driven by input.
 
-**Memory / resource safety** (C/C++/Rust unsafe)
-
-- Annotate all unsafe blocks with a SAFETY comment explaining the invariant
-- Prefer bounded operations; flag all unbounded loops / allocations
-
-**Serialization / deserialization**
-
-- Validate schema before deserializing untrusted data
-- Never deserialize arbitrary objects from untrusted sources (Java ObjectInputStream, Python pickle, etc.)
+**Serialization**
+- Validate the schema before deserializing untrusted data.
+- Never deserialize arbitrary objects from untrusted sources (pickle, Java `ObjectInputStream`,
+  unsafe YAML loaders).
 
 **Concurrency**
-
-- Identify all shared mutable state; prefer immutable data or ownership-based concurrency
-- Flag potential TOCTOU conditions
+- Identify shared mutable state. Prefer immutability or ownership-based designs.
+- Watch for TOCTOU races on files and permissions.
 
 **Dependencies**
+- Justify every new dependency and note whether a standard-library alternative exists.
+- Prefer pinned versions.
 
-- Flag any new dependency introduced; note the purpose and whether a stdlib alternative exists
-- Prefer pinned versions
+## 3. While writing
 
-## Generation Mode
+Add a short `SECURITY:` comment (in the language's comment syntax) wherever you make a
+security decision, such as a sanitization choice, an algorithm, or a boundary check. These
+comments are the audit trail. Don't add them to routine code.
 
-Write the code. Embed inline security comments (`// SECURITY:`, or `) at any point where a security decision was made — e.g., why a particular sanitization was chosen, why a particular algorithm, why a boundary check exists. These comments are not noise; they are the audit trail.
+## 4. After writing
 
-## Post-Generation Self-Review Checklist
+SecureCoder's post-edit hook scans every file you write with fast analyzers (syntax, semgrep,
+bandit) on harnesses that support hooks, and adds any findings to your context. Fix those findings
+before moving on, or explain why one is a false positive.
 
-After writing the code, run through this checklist and emit findings as a compact block:
+For code where a missed issue would be costly, or when the user asks for a thorough check, call
+`securecoder_analyze` with `deep: true` to include CodeQL. It is slow because it builds a database.
+
+When findings remain, delegate to the `securecoder-remediator` agent, or run the loop yourself:
+call `securecoder_analyze` with one stable `session` id, fix, re-analyze, and follow the verdict
+it returns.
+
+Finish with a compact self-review:
 
 ```
-SECURITY REVIEW:
-[ ] No injection sinks with unvalidated input (SQL, shell, eval, template)
+SECURITY REVIEW
+[ ] No injection sinks reachable with unvalidated input (SQL, shell, eval, template, path)
 [ ] No hardcoded secrets or credentials
-[ ] Error paths don't leak sensitive info in messages/logs
-[ ] All external data validated at trust boundary
-[ ] Crypto: using established library, appropriate algorithm
-[ ] Dependencies: no unnecessary additions
-[ ] [language-specific] <add any language-specific check relevant to the task>
-
-FINDINGS: <none | list any issues found, each with severity HIGH/MED/LOW>
+[ ] Error paths don't leak sensitive details
+[ ] External data validated at the trust boundary
+[ ] Crypto uses an established library and a current algorithm
+[ ] No unnecessary new dependencies
+FINDINGS: none | <severity-tagged list>
 ```
 
-If any HIGH severity finding exists, STOP and fix before presenting the code.
-
-## Static Analyzer Integration
-
-After each file write, the PostToolUse hook runs the fast SecureCoder guardians (syntax
-hard-reject checks, semgrep, bandit) and injects any findings into context automatically.
-
-For deep analysis, call the `securecoder_analyze` MCP tool with `deep: true` — this runs
-CodeQL with security-extended query suites (slow: builds a CodeQL database).
-
-When findings are present, invoke the `securecoder-remediator` agent to run the fix →
-re-analyze loop. It uses `securecoder_analyze` with a session id so the server tracks
-attempts against the configured soft/hard retry limits.
-
-## $ARGUMENTS
-
-If arguments are provided, treat them as additional security context or a specific security requirement to enforce (e.g., "enforce FIPS 140-2", "PCI-DSS scope", "no external network calls").
+If a HIGH finding remains, fix it before presenting the code.

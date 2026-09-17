@@ -1,0 +1,9 @@
+interface:
+  display_name: "SecureCoder settings"
+  short_description: "View and change SecureCoder security settings, scan changed files, check analyzers"
+  brand_color: "#B4232A"
+  default_prompt: "$securecoder:securecoder status"
+
+policy:
+  # Settings change only on explicit user request ($securecoder:securecoder), never implicitly.
+  allow_implicit_invocation: false

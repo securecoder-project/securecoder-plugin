@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "matcher": "Write|Edit|StrReplace|MultiEdit|ApplyPatch|EditNotebook",
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/hooks/securecoder-hook.js\" post-edit --platform cursor",
+        "timeout": 180
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/hooks/securecoder-hook.js\" pre-shell --platform cursor",
+        "timeout": 15
+      }
+    ]
+  }
+}

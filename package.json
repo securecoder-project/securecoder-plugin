@@ -1,0 +1,60 @@
+{
+  "name": "securecoder-agent-plugin",
+  "version": "0.2.0",
+  "description": "Security-aware code generation for coding agents (Claude Code, Codex, Cursor, OpenCode): constraint injection, post-edit SAST, and iterative remediation.",
+  "private": true,
+  "license": "MIT",
+  "author": "parsakaz (https://github.com/parsakaz)",
+  "homepage": "https://securecoder-project.github.io/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/parsakaz/securecoder-claude-plugin.git"
+  },
+  "bugs": "https://github.com/parsakaz/securecoder-claude-plugin/issues",
+  "keywords": [
+    "security",
+    "sast",
+    "owasp",
+    "mcp",
+    "claude-code",
+    "codex",
+    "cursor",
+    "opencode",
+    "agent-plugins"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "main": "./opencode/index.js",
+  "bin": {
+    "securecoder": "bin/securecoder"
+  },
+  "exports": {
+    ".": "./opencode/index.js",
+    "./analyze": "./mcp-server/lib/analyze.js",
+    "./settings": "./mcp-server/lib/settings.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    ".agents/",
+    ".claude-plugin/",
+    ".cursor-plugin/",
+    "agents/",
+    "bin/",
+    "hooks/",
+    "mcp-server/",
+    "opencode/",
+    "skills/",
+    "plugin.json",
+    "mcp.json",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "check": "node scripts/check-manifests.js",
+    "validate": "npm run check && npm test"
+  }
+}

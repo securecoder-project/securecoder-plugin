@@ -12,6 +12,11 @@ const { runCodeQLGuardian } = require('./codeql');
 const { runBandit, runSemgrep } = require('./external');
 const { buildFeedback } = require('./feedback');
 const { recordAttempt, verdictGuidance } = require('./retry');
+const { meetsThreshold } = require('./severity');
+
+// Generated bundles and data dumps are not meaningful SAST targets and would
+// stall the post-edit hook; skip anything larger than this.
+const MAX_FILE_BYTES = 2 * 1024 * 1024;
 
 function resolveFiles(filePaths, projectRoot) {
   const files = [];
@@ -21,6 +26,10 @@ function resolveFiles(filePaths, projectRoot) {
     const rel = path.relative(projectRoot, abs);
     if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
       skipped.push({ path: p, reason: 'not a file' });
+      continue;
+    }
+    if (fs.statSync(abs).size > MAX_FILE_BYTES) {
+      skipped.push({ path: p, reason: `larger than ${MAX_FILE_BYTES / (1024 * 1024)} MB` });
       continue;
     }
     files.push({ abs, rel: rel.startsWith('..') ? path.basename(abs) : rel, content: fs.readFileSync(abs, 'utf8') });
@@ -34,16 +43,17 @@ async function analyze({
   analyzers = null, // null = config.analyzers; 'deep' additions via includeDeep
   includeDeep = false,
   session = null,
+  config = null, // pre-resolved effective config; loaded from projectRoot when omitted
   log = () => {},
 }) {
-  const config = loadConfig(projectRoot);
+  config = config || loadConfig(projectRoot);
   const { files: allFiles, skipped } = resolveFiles(filePaths, projectRoot);
   const excluded = allFiles.filter((f) => isExcluded(f.rel, config));
   const files = allFiles.filter((f) => !isExcluded(f.rel, config));
   for (const f of excluded) skipped.push({ path: f.rel, reason: 'matches exclude_patterns' });
 
   if (files.length === 0) {
-    return { violations: [], failures: [], skipped, feedback: null, retry: null, analyzersRun: [] };
+    return { violations: [], belowThreshold: 0, threshold: config.severity_threshold, failures: [], skipped, feedback: null, retry: null, analyzersRun: [] };
   }
 
   const selected = new Set(analyzers || config.analyzers);
@@ -90,7 +100,10 @@ async function analyze({
   }
 
   const results = await Promise.all(runs);
-  const violations = results.flatMap((r) => r.violations);
+  const allViolations = results.flatMap((r) => r.violations);
+  const threshold = config.severity_threshold || 'LOW';
+  const violations = allViolations.filter((v) => meetsThreshold(v, threshold));
+  const belowThreshold = allViolations.length - violations.length;
   const analyzersRun = results.map((r) => r.name);
 
   const fileContents = new Map(files.map((f) => [f.rel, f.content]));
@@ -105,7 +118,7 @@ async function analyze({
     retry = { ...assessment, guidance: verdictGuidance(assessment) };
   }
 
-  return { violations, failures, skipped, feedback, retry, analyzersRun };
+  return { violations, belowThreshold, threshold, failures, skipped, feedback, retry, analyzersRun };
 }
 
 module.exports = { analyze };

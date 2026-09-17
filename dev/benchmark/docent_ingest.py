@@ -6,7 +6,7 @@ Pairs two inputs produced by a single benchmark task:
   - a SecureCoder trace log (see SECURECODER_TRACE_LOG in DEVELOPMENT.md)
 
 Usage:
-  .venv/bin/python scripts/docent_ingest.py \
+  .venv/bin/python dev/benchmark/docent_ingest.py \
       --transcript ~/.claude/projects/.../<uuid>.jsonl \
       --trace /path/to/task-001.trace.jsonl \
       --task-id demo-task-001 \
