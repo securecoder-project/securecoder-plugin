@@ -105,6 +105,7 @@ export const SecureCoderPlugin = async ({ client, directory, worktree }) => {
         outcome = hooks.preShell({ args: output.args, cwd: projectDir }, { platform: 'opencode' });
       } catch (err) {
         log('warn', `shell guard error (ignored): ${err.message}`);
+        hooks.recordError({ event: 'pre-shell', error: err, payload: { cwd: projectDir } });
         return;
       }
       if (!outcome.response) return;
@@ -130,6 +131,7 @@ export const SecureCoderPlugin = async ({ client, directory, worktree }) => {
         if (outcome.response) output.output += `\n\n${outcome.response.text}`;
       } catch (err) {
         log('warn', `post-edit scan error (ignored): ${err.message}`);
+        hooks.recordError({ event: 'post-edit', error: err, payload: { cwd: projectDir } });
       }
     },
   };

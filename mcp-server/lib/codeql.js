@@ -1,6 +1,14 @@
-// Port of guardian/codeql CodeQLGuardian.kt + CodeQLRunner.kt.
-// Writes the candidate files to a temp source root, builds a CodeQL database
-// per detected language, analyzes with query-pack fallback, and parses SARIF.
+// CodeQL deep analyzer. Port of guardian/codeql CodeQLGuardian.kt + CodeQLRunner.kt.
+// Writes the files under analysis to a temp source root, builds one CodeQL
+// database per detected language, runs that language's query suite, and parses
+// the SARIF.
+//
+// There is deliberately no crash recovery here. Any CodeQL subprocess failure
+// (non-zero exit, timeout, binary that cannot spawn) throws out of
+// runCodeQLGuardian and is contained by the per-analyzer isolation in
+// analyze.js: the other analyzers still report and the failure is listed in the
+// result. The one exception is a project CodeQL cannot build (see
+// isUnbuildableProject), which is an expected outcome rather than a fault.
 
 'use strict';
 
@@ -11,70 +19,35 @@ const { run, sanitizedEnv } = require('./proc');
 const { detectLanguages } = require('./languages');
 const { parseSarifToViolations } = require('./sarif');
 
-function defaultQueryPackCandidates() {
-  return {
-    javascript: [
-      'codeql/javascript-queries:codeql-suites/javascript-code-scanning.qls',
-      'codeql/javascript-queries:codeql-suites/javascript-security-extended.qls',
-    ],
-    python: [
-      'codeql/python-queries:codeql-suites/python-code-scanning.qls',
-      'codeql/python-queries:codeql-suites/python-security-extended.qls',
-    ],
-    java: ['codeql/java-queries:codeql-suites/java-security-extended.qls'],
-    cpp: [
-      'codeql/cpp-queries:codeql-suites/cpp-code-scanning.qls',
-      'codeql/cpp-queries:codeql-suites/cpp-security-extended.qls',
-    ],
-    csharp: ['codeql/csharp-queries:codeql-suites/csharp-security-extended.qls'],
-    ruby: ['codeql/ruby-queries:codeql-suites/ruby-security-extended.qls'],
-    go: [
-      'codeql/go-queries:codeql-suites/go-code-scanning.qls',
-      'codeql/go-queries:codeql-suites/go-security-extended.qls',
-    ],
-    swift: ['codeql/swift-queries:codeql-suites/swift-security-extended.qls'],
-  };
-}
+// The one query suite run for each language. A language without an entry is
+// not analyzed.
+const QUERY_PACKS = {
+  javascript: 'codeql/javascript-queries:codeql-suites/javascript-code-scanning.qls',
+  python: 'codeql/python-queries:codeql-suites/python-code-scanning.qls',
+  java: 'codeql/java-queries:codeql-suites/java-security-extended.qls',
+  cpp: 'codeql/cpp-queries:codeql-suites/cpp-code-scanning.qls',
+  csharp: 'codeql/csharp-queries:codeql-suites/csharp-security-extended.qls',
+  ruby: 'codeql/ruby-queries:codeql-suites/ruby-security-extended.qls',
+  go: 'codeql/go-queries:codeql-suites/go-code-scanning.qls',
+  swift: 'codeql/swift-queries:codeql-suites/swift-security-extended.qls',
+};
 
-// Known CodeQL crash signatures where retrying with a fallback pack or
-// skipping the language is safer than failing the whole analysis.
-function isRecoverableToolFailure(message) {
-  return (
-    message.includes('SIGSEGV') ||
-    message.includes('OutOfMemoryError') ||
-    message.includes('NullPointerException') ||
-    message.includes('EvaluationSchedule.allocateDfsSeqnums') ||
-    message.includes('QueryEvaluator.setPriorityIfNecessary') ||
-    /fatal internal error occurred/i.test(message) ||
-    message.includes('hs_err_pid') ||
-    message.includes('Cannot invoke "com.google.re2j.Machine.init(int)"') ||
-    message.includes('OpenJDK Runtime Environment') ||
-    message.includes('Aborted')
-  );
-}
+// Resource limits are fixed rather than settings: choosing better values takes
+// a reading of CodeQL's own documentation, and these suit a handful of files.
+const THREADS = 1;
+const RAM_MB = 2048;
+const DEFAULT_TIMEOUT_MS = 600000;
 
-function shouldRetryWithFallback(language, message) {
-  return ['python', 'javascript', 'go', 'cpp'].includes(language) && isRecoverableToolFailure(message);
-}
-
-function shouldSkipCreateFailure(language, message) {
-  if (!['cpp', 'javascript', 'python', 'go'].includes(language)) return false;
-  const m = message.toLowerCase();
+// True when `codeql database create` failed because the project cannot be
+// built: no build system for the autobuilder to drive, or a Go file importing
+// a module that no go.mod provides. That is common for a few loose files and
+// says nothing about CodeQL's health, so the language is skipped instead of
+// being reported as an analyzer failure.
+function isUnbuildableProject(message) {
   return (
     message.includes('No supported build system detected.') ||
-    m.includes('no required module provides package') ||
-    m.includes('no such file or directory') ||
-    m.includes('fatal error:') ||
-    m.includes('undefined reference') ||
-    m.includes('malformed expansion') ||
-    m.includes('unexpected eof while looking for matching') ||
-    m.includes('syntax error: unexpected end of file') ||
-    isRecoverableToolFailure(message)
+    message.toLowerCase().includes('no required module provides package')
   );
-}
-
-function shouldSkipAnalyzeFailure(language, message) {
-  return ['python', 'javascript', 'go', 'cpp'].includes(language) && isRecoverableToolFailure(message);
 }
 
 function writeBuildScript(sourceRoot, fileName, body) {
@@ -114,24 +87,25 @@ function detectBuildCommand(language, sourceRoot) {
 }
 
 class CodeQLRunner {
-  constructor(binary = 'codeql', { threads = 1, ramMb = 2048, timeoutMs = 600000 } = {}) {
+  constructor(binary = 'codeql', { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
     this.binary = binary;
-    this.threads = String(threads);
-    this.ramMb = String(ramMb);
     this.timeoutMs = timeoutMs;
   }
 
   async exec(args, cwd) {
     const { code, output, timedOut } = await run(args, {
       cwd,
-      env: sanitizedEnv(this.ramMb),
+      env: sanitizedEnv(RAM_MB),
       timeoutMs: this.timeoutMs,
     });
     if (timedOut) {
       throw new Error(`Command timed out after ${this.timeoutMs}ms (${args.join(' ')})`);
     }
     if (code !== 0) {
-      throw new Error(`Command failed (${args.join(' ')}) with exit code ${code}. Output:\n${output}`);
+      // Failures are shown by their first line, so the cause goes there and
+      // the long command line after it.
+      const cause = output.split('\n').map((l) => l.trim()).find(Boolean) || 'no output';
+      throw new Error(`codeql ${args.slice(1, 3).join(' ')} failed with exit code ${code}: ${cause.slice(0, 300)}\nCommand: ${args.join(' ')}\nOutput:\n${output}`);
     }
     return output;
   }
@@ -141,8 +115,8 @@ class CodeQLRunner {
       this.binary, 'database', 'create', dbDir,
       `--language=${language}`,
       '--source-root', sourceRoot,
-      `--threads=${this.threads}`,
-      `--ram=${this.ramMb}`,
+      `--threads=${THREADS}`,
+      `--ram=${RAM_MB}`,
     ];
     if (buildCommand) args.push(`--command=${buildCommand}`);
     return this.exec(args, sourceRoot);
@@ -153,59 +127,16 @@ class CodeQLRunner {
       this.binary, 'database', 'analyze', dbDir, queryPack,
       '--format=sarifv2.1.0',
       '--output', outSarif,
-      `--threads=${this.threads}`,
-      `--ram=${this.ramMb}`,
+      `--threads=${THREADS}`,
+      `--ram=${RAM_MB}`,
     ], dbDir);
   }
-
-  async getToolVersion() {
-    const output = await this.exec([this.binary, '--version'], null);
-    const firstLine = (output.split('\n')[0] || '').trim();
-    const match = firstLine.match(/\b\d+(?:\.\d+)+\b/);
-    if (!match) throw new Error(`Unable to parse CodeQL version from: '${firstLine}'`);
-    return match[0];
-  }
-}
-
-async function analyzeWithFallback({ runner, language, dbDir, queryPacks, outSarif, log }) {
-  let lastFailure = null;
-  for (let i = 0; i < queryPacks.length; i++) {
-    try {
-      await runner.analyzeDatabase(dbDir, queryPacks[i], outSarif);
-      return true;
-    } catch (e) {
-      lastFailure = e;
-      const msg = e.message || '';
-      if (i + 1 < queryPacks.length && shouldRetryWithFallback(language, msg)) {
-        log(`Retrying CodeQL for ${language} with fallback pack after failure: ${msg.slice(0, 200)}`);
-        continue;
-      }
-      if (shouldSkipAnalyzeFailure(language, msg)) {
-        log(`Skipping CodeQL for ${language} after analyze failure: ${msg.slice(0, 200)}`);
-        return false;
-      }
-      throw e;
-    }
-  }
-  if (lastFailure && shouldSkipAnalyzeFailure(language, lastFailure.message || '')) {
-    log(`Skipping CodeQL for ${language} after repeated analyze failures`);
-    return false;
-  }
-  throw lastFailure || new Error(`CodeQL analyze failed for ${language} without details`);
 }
 
 // files: [{ rel, content }] — candidate source files, paths relative to project root.
 // Returns Violation[] with location.file mapped back to the given rel paths.
 async function runCodeQLGuardian(files, options = {}) {
-  const {
-    binary = 'codeql',
-    enabledLanguages = null,
-    queryPackOverrides = {},
-    threads = 1,
-    ramMb = 2048,
-    timeoutMs = 600000,
-    log = () => {},
-  } = options;
+  const { binary = 'codeql', timeoutMs = DEFAULT_TIMEOUT_MS, log = () => {} } = options;
 
   const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'codeql-guardian-'));
   const sourceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'codeql-src-'));
@@ -216,21 +147,14 @@ async function runCodeQLGuardian(files, options = {}) {
       fs.writeFileSync(target, file.content);
     }
 
-    const packCandidates = { ...defaultQueryPackCandidates() };
-    for (const [language, packs] of Object.entries(queryPackOverrides)) {
-      packCandidates[language] = [...packs, ...(packCandidates[language] || [])]
-        .filter((p, i, arr) => arr.indexOf(p) === i);
-    }
-
-    const languages = [...detectLanguages(files.map((f) => f.rel))]
-      .filter((l) => !enabledLanguages || enabledLanguages.includes(l));
+    const languages = [...detectLanguages(files.map((f) => f.rel))];
     log(`CodeQL: detected languages [${languages.join(', ')}] for ${files.length} file(s)`);
 
-    const runner = new CodeQLRunner(binary, { threads, ramMb, timeoutMs });
+    const runner = new CodeQLRunner(binary, { timeoutMs });
     const sarifPaths = [];
     for (const language of languages) {
-      const queryPacks = packCandidates[language] || [];
-      if (queryPacks.length === 0) continue;
+      const queryPack = QUERY_PACKS[language];
+      if (!queryPack) continue;
       const dbDir = path.join(workRoot, `db-${language}`);
       const outSarif = path.join(workRoot, `results-${language}.sarif`);
       const buildCmd = detectBuildCommand(language, sourceRoot);
@@ -238,25 +162,22 @@ async function runCodeQLGuardian(files, options = {}) {
       try {
         await runner.createDatabase(language, sourceRoot, dbDir, buildCmd);
       } catch (e) {
-        if (shouldSkipCreateFailure(language, e.message || '')) {
-          log(`Skipping CodeQL for ${language} after database create failure: ${(e.message || '').slice(0, 200)}`);
-          continue;
-        }
-        throw e;
+        if (!isUnbuildableProject(e.message || '')) throw e;
+        log(`Skipping CodeQL for ${language}: the project cannot be built`);
+        continue;
       }
 
-      const analyzed = await analyzeWithFallback({ runner, language, dbDir, queryPacks, outSarif, log });
-      if (analyzed && fs.existsSync(outSarif)) sarifPaths.push(outSarif);
+      await runner.analyzeDatabase(dbDir, queryPack, outSarif);
+      if (fs.existsSync(outSarif)) sarifPaths.push(outSarif);
     }
 
-    const relSet = new Set(files.map((f) => f.rel));
     const violations = [];
     for (const sarifPath of sarifPaths) {
       const text = fs.readFileSync(sarifPath, 'utf8');
       for (const v of parseSarifToViolations(text, 'codeql')) {
-        // SARIF URIs are relative to the temp source root; map back if possible.
-        const uri = v.location.file.replace(/^\.\//, '');
-        v.location.file = relSet.has(uri) ? uri : uri;
+        // SARIF URIs are relative to the temp source root, which mirrors the
+        // rel paths the files came in with.
+        v.location.file = v.location.file.replace(/^\.\//, '');
         violations.push(v);
       }
     }
@@ -267,4 +188,4 @@ async function runCodeQLGuardian(files, options = {}) {
   }
 }
 
-module.exports = { runCodeQLGuardian, CodeQLRunner, defaultQueryPackCandidates, detectBuildCommand };
+module.exports = { runCodeQLGuardian, CodeQLRunner, QUERY_PACKS, isUnbuildableProject, detectBuildCommand };

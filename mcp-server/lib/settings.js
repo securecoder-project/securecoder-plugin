@@ -10,6 +10,11 @@
 // written ("trusted" keys) are honored only from user scope or env. A cloned
 // repository must never be able to make the post-edit hook execute an
 // arbitrary program just by committing a .securecoder.json.
+//
+// Kill switches: `enabled` and `mode` follow the precedence above with one
+// exception. A project or local value that would weaken what defaults and user
+// config give is ignored (see FLOOR_KEYS), because the agent being checked can
+// write both of those files.
 
 'use strict';
 
@@ -25,10 +30,10 @@ const DEFAULT_EXCLUDES = [
   'tests/', '*.test.js', '*.test.ts', '*.spec.*',
   'migrations/', 'node_modules/', '__pycache__/',
 ];
-const CODEQL_LANGUAGES = ['cpp', 'csharp', 'go', 'java', 'javascript', 'python', 'ruby', 'swift'];
 
 // Flat dotted keys → spec. `weakens(next, prev)` flags changes that reduce
-// protection so every write path can surface them to the user.
+// protection so every write path can surface them to the user. For FLOOR_KEYS
+// it also decides which repository-scope values resolve() honors.
 const SCHEMA = {
   enabled: {
     type: 'boolean', default: true, env: 'SECURECODER_ENABLED',
@@ -37,7 +42,7 @@ const SCHEMA = {
   },
   mode: {
     type: 'enum', values: ['advisory', 'enforce'], default: 'advisory', env: 'SECURECODER_MODE',
-    description: 'advisory: findings are added to the agent context. enforce: findings at or above the threshold block the turn until addressed, and risky shell commands require approval.',
+    description: 'What the hooks return. advisory: findings are added to the agent context. enforce: findings at or above the threshold block the turn until addressed, and risky shell commands require approval.',
     weakens: (next, prev) => prev === 'enforce' && next === 'advisory',
   },
   severity_threshold: {
@@ -66,11 +71,11 @@ const SCHEMA = {
   },
   'retry.soft_limit': {
     type: 'integer', min: 1, max: 100, default: 7,
-    description: 'Remediation attempt at which the agent must review whether the fix loop is still making progress.',
+    description: 'Remediation attempt from which securecoder_analyze advises the agent to review whether its fix loop is still making progress (verdict meta_review). Advice to the agent, independent of mode.',
   },
   'retry.hard_limit': {
     type: 'integer', min: 1, max: 100, default: 14,
-    description: 'Remediation attempt at which the fix loop stops and reports PARTIAL.',
+    description: 'Remediation attempt from which securecoder_analyze advises the agent to stop and report PARTIAL (verdict hard_limit_exhausted). Advice to the agent; SecureCoder does not run the loop and cannot stop it.',
   },
   'hooks.post_edit': {
     type: 'boolean', default: true, env: 'SECURECODER_POST_EDIT',
@@ -82,21 +87,10 @@ const SCHEMA = {
     description: 'Flag high-risk shell commands (curl | sh, disabled TLS verification, chmod 777, rm -rf on broad targets).',
     weakens: (next) => next === false,
   },
-  'codeql.languages': {
-    type: 'set', values: CODEQL_LANGUAGES, default: null, nullable: true,
-    description: 'CodeQL languages to analyze; null analyzes every detected language.',
-  },
-  'codeql.query_packs': {
-    type: 'object', default: {},
-    description: 'Per-language CodeQL query packs, tried before the security-extended defaults.',
-  },
-  'codeql.threads': {
-    type: 'integer', min: 0, max: 256, default: 1,
-    description: 'CodeQL worker threads (0 = one per core).',
-  },
-  'codeql.ram_mb': {
-    type: 'integer', min: 512, max: 262144, default: 2048,
-    description: 'CodeQL memory budget in MB.',
+  'hooks.user_prompt': {
+    type: 'boolean', default: true, env: 'SECURECODER_USER_PROMPT',
+    description: 'Add the core secure-coding constraints, and a short checklist for the weakness classes the prompt touches, to every prompt. Works on Claude Code and Codex; Cursor and OpenCode have no per-prompt context hook.',
+    weakens: (next) => next === false,
   },
   'codeql.timeout_seconds': {
     type: 'integer', min: 30, max: 14400, default: 600,
@@ -123,6 +117,21 @@ const SCHEMA = {
   },
 };
 
+// The two kill switches. A file inside the repository (project or local
+// scope) may strengthen them but never take them below what defaults and user
+// config give: an agent holding Write or Bash can create those files, so
+// honoring `"enabled": false` from one would let it switch off its own
+// post-edit scan. Every other key with a `weakens` predicate stays under
+// project control on purpose; thresholds, analyzers and exclusions are tuning
+// a team is meant to commit.
+const FLOOR_KEYS = new Set(['enabled', 'mode']);
+
+// Settings removed in 0.3.0. A config file that still carries one gets a
+// warning naming it instead of the generic unknown-key one, and typing one gets
+// an error that says where it went. Delete this constant and its three uses
+// (flattenKeys, resolve, requireKey) in the release after 0.3.0.
+const REMOVED_KEYS = new Set(['codeql.languages', 'codeql.query_packs', 'codeql.threads', 'codeql.ram_mb']);
+
 // Short names accepted anywhere a key is typed (CLI, /securecoder).
 const ALIASES = {
   severity: 'severity_threshold',
@@ -135,6 +144,7 @@ const ALIASES = {
   hard_limit: 'retry.hard_limit',
   post_edit: 'hooks.post_edit',
   shell_guard: 'hooks.shell_guard',
+  user_prompt: 'hooks.user_prompt',
   deep: 'deep_analyzers',
 };
 
@@ -232,7 +242,9 @@ function flattenKeys(obj, prefix = '') {
   for (const [k, v] of Object.entries(obj || {})) {
     const full = prefix ? `${prefix}.${k}` : k;
     if (IGNORED_FILE_KEYS.has(full)) continue;
-    if (SCHEMA[full]) keys.push(full);
+    // A removed key stops the descent like a known one, so an object value
+    // under it is reported once, as that key, rather than leaf by leaf.
+    if (SCHEMA[full] || REMOVED_KEYS.has(full)) keys.push(full);
     else if (v && typeof v === 'object' && !Array.isArray(v)) keys.push(...flattenKeys(v, full));
     else keys.push(full);
   }
@@ -246,9 +258,8 @@ function describeAllowed(spec) {
     case 'boolean': return 'on | off';
     case 'enum': return spec.values.join(' | ');
     case 'integer': return `integer ${spec.min}–${spec.max}`;
-    case 'set': return `comma-separated subset of: ${spec.values.join(', ')}${spec.nullable ? ' (or "all")' : ''}`;
+    case 'set': return `comma-separated subset of: ${spec.values.join(', ')}`;
     case 'list': return 'comma-separated list or JSON array';
-    case 'object': return 'JSON object';
     default: return spec.nullable ? 'text (or "null")' : 'text';
   }
 }
@@ -280,9 +291,6 @@ function validate(key, value) {
     case 'list':
       if (!Array.isArray(value) || value.some((v) => typeof v !== 'string' || v.length === 0)) fail('expected an array of non-empty strings');
       return [...new Set(value)];
-    case 'object':
-      if (!value || typeof value !== 'object' || Array.isArray(value)) fail('expected a JSON object');
-      return value;
     default:
       if (typeof value !== 'string' || value.length === 0) fail('expected non-empty text');
       return value;
@@ -297,7 +305,7 @@ function parseValue(key, raw) {
   const spec = SCHEMA[key];
   if (raw === undefined || raw === null) throw new SettingsError(`Missing value for ${key}. Allowed: ${describeAllowed(spec)}.`);
   const text = String(raw).trim();
-  if (spec.nullable && ['null', 'none', 'all', 'default'].includes(text.toLowerCase())) return null;
+  if (spec.nullable && ['null', 'none', 'default'].includes(text.toLowerCase())) return null;
   switch (spec.type) {
     case 'boolean': {
       const lower = text.toLowerCase();
@@ -321,11 +329,6 @@ function parseValue(key, raw) {
       }
       if (spec.type === 'set') items = items.map((s) => (typeof s === 'string' ? s.toLowerCase() : s));
       return validate(key, items);
-    }
-    case 'object': {
-      let obj;
-      try { obj = JSON.parse(text); } catch { throw new SettingsError(`Invalid JSON object for ${key}.`); }
-      return validate(key, obj);
     }
     default:
       return validate(key, text);
@@ -353,6 +356,9 @@ function suggestKey(key) {
 function requireKey(key) {
   key = canonicalKey(key);
   if (!SCHEMA[key]) {
+    if (REMOVED_KEYS.has(key.replace(/-/g, '_'))) {
+      throw new SettingsError(`Unknown setting "${key}": it was removed in SecureCoder 0.3.0 and no longer has any effect. Run "securecoder config keys" to list settings.`, 'unknown_key');
+    }
     const hint = suggestKey(key);
     throw new SettingsError(`Unknown setting "${key}".${hint ? ` Did you mean "${hint}"?` : ''} Run "securecoder config keys" to list settings.`, 'unknown_key');
   }
@@ -366,9 +372,17 @@ function requireScope(scope) {
 
 // ── file IO ──────────────────────────────────────────────────────────────────
 
+// Config files are tiny. A project or local path is inside the repository, so
+// it may be anything: a FIFO or a link to a device would block or exhaust
+// memory in a synchronous read, and with it every hook.
+const MAX_CONFIG_BYTES = 1024 * 1024;
+
 function readScopeFile(file) {
   if (!fs.existsSync(file)) return { exists: false, data: {} };
   try {
+    const stat = fs.statSync(file);
+    if (!stat.isFile()) return { exists: true, data: {}, error: 'not a regular file' };
+    if (stat.size > MAX_CONFIG_BYTES) return { exists: true, data: {}, error: `larger than ${MAX_CONFIG_BYTES / 1024} KiB` };
     const data = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
       return { exists: true, data: {}, error: 'top-level value must be a JSON object' };
@@ -397,6 +411,29 @@ function cloneDefault(value) {
   return value && typeof value === 'object' ? JSON.parse(JSON.stringify(value)) : value;
 }
 
+// The floor of a kill switch: default < user scope, the two sources a file
+// inside the repository cannot touch. An invalid user value falls back to the
+// default here exactly as it does in resolve(), which reports it.
+function floorValue(key, userData) {
+  if (hasPath(userData, key)) {
+    try { return validate(key, getPath(userData, key)); } catch { /* reported by resolve() */ }
+  }
+  return SCHEMA[key].default;
+}
+
+// True when a project- or local-scope value would take a kill switch below
+// its floor. The comparison is against the floor, not against whatever a lower
+// repository scope produced: a repository file that strengthens the setting
+// can always be undone by editing that same file, so shielding project-level
+// strengthening from local scope would buy no security and only break
+// legitimate personal overrides. Restating the floor is not weakening; the
+// explicit check is needed because the `enabled` predicate ignores `prev`.
+function belowFloor(key, scope, candidate, userData) {
+  if (!FLOOR_KEYS.has(key) || scope === 'user') return false;
+  const floor = floorValue(key, userData);
+  return candidate !== floor && SCHEMA[key].weakens(candidate, floor);
+}
+
 function resolve(startDir = process.cwd(), { env = process.env, root: explicitRoot } = {}) {
   const root = explicitRoot ? path.resolve(explicitRoot) : findProjectRoot(startDir);
   const paths = scopePaths(root, env);
@@ -410,7 +447,8 @@ function resolve(startDir = process.cwd(), { env = process.env, root: explicitRo
     if (read.error) warnings.push(`Ignoring ${scope} config ${paths[scope]}: ${read.error}`);
     scopeData[scope] = read.data;
     for (const key of flattenKeys(read.data)) {
-      if (!SCHEMA[key]) warnings.push(`Unknown key "${key}" in ${scope} config (ignored).`);
+      if (REMOVED_KEYS.has(key)) warnings.push(`"${key}" in ${scope} config was removed in SecureCoder 0.3.0 and is ignored. Delete it from the file to silence this warning.`);
+      else if (!SCHEMA[key]) warnings.push(`Unknown key "${key}" in ${scope} config (ignored).`);
     }
   }
 
@@ -425,7 +463,12 @@ function resolve(startDir = process.cwd(), { env = process.env, root: explicitRo
         continue;
       }
       try {
-        value = validate(key, getPath(scopeData[scope], key));
+        const candidate = validate(key, getPath(scopeData[scope], key));
+        if (belowFloor(key, scope, candidate, scopeData.user)) {
+          warnings.push(`Ignoring "${key}" = ${formatValue(candidate)} from ${scope} config: a file inside the repository may strengthen this setting but never weaken it. Set it in user config or $${spec.env} instead.`);
+          continue;
+        }
+        value = candidate;
         source = scope;
       } catch (err) {
         warnings.push(`${err.message} (in ${scope} config; ignored)`);
@@ -495,10 +538,16 @@ function assertWritable(key, scope) {
 
 function set(key, value, { scope, cwd = process.cwd(), root, env = process.env } = {}) {
   key = canonicalKey(key);
-  assertWritable(key, scope);
+  const spec = assertWritable(key, scope);
   const normalized = validate(key, value);
   const before = resolve(cwd, { env, root });
   const file = before.files[scope].path;
+  // resolve() would ignore this value, so writing it would leave a dead entry
+  // in the file and a misleading "takes precedence" note. Refuse up front.
+  if (belowFloor(key, scope, normalized, readScopeFile(before.files.user.path).data)) {
+    const change = normalized === false ? 'turned off' : `lowered to ${formatValue(normalized)}`;
+    throw new SettingsError(`"${key}" cannot be ${change} from ${scope} config: a file inside the repository may strengthen this setting but never weaken it. Use --scope user (applies to all your projects) or the $${spec.env} environment variable.`, 'weakens_floor');
+  }
   const data = loadForWrite(file);
   setPath(data, key, normalized);
   writeJsonAtomic(file, data);
@@ -579,7 +628,6 @@ function reset({ scope, cwd = process.cwd(), root, env = process.env } = {}) {
 
 const STARTER_PROJECT_CONFIG = {
   _comment: 'SecureCoder project settings, shared with everyone working in this repository. Personal overrides belong in .securecoder.local.json. Run "/securecoder help" or "securecoder config keys" for every option.',
-  mode: 'advisory',
   severity_threshold: 'LOW',
   analyzers: ['syntax', 'semgrep', 'bandit'],
   semgrep_config: 'p/owasp-top-ten',
@@ -600,17 +648,24 @@ function init({ scope = 'project', cwd = process.cwd(), root, env = process.env,
   return { scope, file };
 }
 
-// Ensures .securecoder.local.json is gitignored. Returns what was done.
+// Personal overrides, and the directory holding the hook error trail.
+const GITIGNORE_ENTRIES = ['.securecoder.local.json', '.securecoder/'];
+
+// Ensures everything SecureCoder writes for one developer is gitignored.
+// Returns what was done: `added` entries were appended, `present` ones were
+// already there.
 function ensureLocalGitignored(root) {
   const gitignore = path.join(root, '.gitignore');
-  const entry = '.securecoder.local.json';
   const existing = fs.existsSync(gitignore) ? fs.readFileSync(gitignore, 'utf8') : '';
-  if (existing.split(/\r?\n/).some((line) => line.trim() === entry || line.trim() === `/${entry}`)) {
-    return { file: gitignore, changed: false };
-  }
+  const lines = existing.split(/\r?\n/).map((line) => line.trim().replace(/^\//, ''));
+  // A directory entry ignores the same files without its trailing slash.
+  const isPresent = (entry) => lines.includes(entry) || (entry.endsWith('/') && lines.includes(entry.slice(0, -1)));
+  const present = GITIGNORE_ENTRIES.filter(isPresent);
+  const added = GITIGNORE_ENTRIES.filter((entry) => !isPresent(entry));
+  if (added.length === 0) return { file: gitignore, changed: false, added, present };
   const prefix = existing.length && !existing.endsWith('\n') ? '\n' : '';
-  fs.writeFileSync(gitignore, `${existing}${prefix}${entry}\n`);
-  return { file: gitignore, changed: true };
+  fs.writeFileSync(gitignore, `${existing}${prefix}${added.join('\n')}\n`);
+  return { file: gitignore, changed: true, added, present };
 }
 
 // Default write scope: a project-local override inside a project, user scope
@@ -627,7 +682,6 @@ function formatValue(value) {
   if (value === true) return 'on';
   if (value === false) return 'off';
   if (Array.isArray(value)) return value.length ? value.join(', ') : '(none)';
-  if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
 }
 

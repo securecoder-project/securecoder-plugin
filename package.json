@@ -1,6 +1,6 @@
 {
   "name": "securecoder-agent-plugin",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Security-aware code generation for coding agents (Claude Code, Codex, Cursor, OpenCode): constraint injection, post-edit SAST, and iterative remediation.",
   "private": true,
   "license": "MIT",

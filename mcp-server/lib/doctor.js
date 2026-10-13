@@ -1,9 +1,11 @@
 // Environment checks: which analyzer binaries resolve on this machine, with
-// platform-appropriate install hints for the ones that do not.
+// platform-appropriate install hints for the ones that do not, and whether the
+// hooks have been recording faults for this project.
 
 'use strict';
 
 const { run } = require('./proc');
+const { readErrorLog } = require('./error-log');
 
 function installHint(tool, platform = process.platform) {
   const mac = platform === 'darwin';
@@ -82,4 +84,10 @@ function nodeVersionOk() {
   return { version: process.versions.node, ok: major >= 18 };
 }
 
-module.exports = { checkTools, installHint, nodeVersionOk };
+// Summary of the project's hook error trail: { count, last, file }, or null
+// when nothing has been recorded.
+function hookErrors(root) {
+  return readErrorLog(root);
+}
+
+module.exports = { checkTools, installHint, nodeVersionOk, hookErrors };

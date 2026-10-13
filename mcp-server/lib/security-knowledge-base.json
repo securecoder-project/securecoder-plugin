@@ -1,0 +1,203 @@
+{
+  "_comment": "SecureCoder CWE knowledge base. Data only; mcp-server/lib/knowledge-base.js selects and renders it. Every entry has the same keys. keywords: lowercase words or phrases that select the entry. languages: empty for any language, otherwise the languages.js ids the entry is limited to. summary: one line for the per-prompt hook (the repair in brief and what it must preserve). detect / repair / false_positives / preserve: the checklist fields. Order matters: it breaks ties between equally matched entries.",
+  "entries": [
+    {
+      "id": "CWE-89",
+      "name": "SQL injection",
+      "keywords": ["sql", "sql injection", "sqlite", "mysql", "postgres", "postgresql", "mariadb", "database query", "db query", "raw query", "where clause", "cursor.execute", "jdbc", "prepared statement"],
+      "languages": [],
+      "summary": "bind every untrusted value as a query parameter and allowlist identifiers; keep the query's results and return shape.",
+      "detect": "A query string is built by concatenating, interpolating or formatting untrusted values (request parameters, form fields, file contents) into SQL text that is then executed.",
+      "repair": "Pass every untrusted value as a bound parameter of a parameterized query or prepared statement. Identifiers that cannot be bound (table or column names, sort direction) must be chosen from a fixed allowlist.",
+      "false_positives": "Do not flag if every dynamic part of the query is a bound parameter, a constant, or an identifier picked from a fixed allowlist, or if an ORM or query builder already binds the values.",
+      "preserve": "The query's results, column order, SQL dialect and transaction behavior, and the function's return shape."
+    },
+    {
+      "id": "CWE-78",
+      "name": "OS command injection",
+      "keywords": ["subprocess", "os.system", "popen", "child_process", "exec.command", "runtime.exec", "processbuilder", "shell=true", "shell command", "shell commands", "shell script", "shell out", "system command", "external command", "external program", "command injection"],
+      "languages": [],
+      "summary": "run a constant program with an argument vector and no shell; keep its arguments, output and exit-status handling.",
+      "detect": "A command line is assembled from untrusted input and handed to a shell (system, popen, a single-string exec, shell=True, backticks), or untrusted input becomes the program name or an option of a spawned process.",
+      "repair": "Call the program directly with an argument vector and no shell, keeping the program name constant. Pass untrusted values as separate arguments, after a `--` separator where the program supports one, or replace the subprocess with a library or filesystem API.",
+      "false_positives": "Do not flag if the command and all its arguments are constants, or if untrusted values are passed only as separate arguments to an argument-vector API with no shell and cannot be read as options.",
+      "preserve": "The program that is run, its effective arguments, working directory and environment, and how exit status, stdout and stderr reach the caller."
+    },
+    {
+      "id": "CWE-22",
+      "name": "Path traversal",
+      "keywords": ["path traversal", "directory traversal", "filename", "filenames", "file name", "file named", "file by name", "file path", "filepath", "download file", "serve file", "static files", "send_file", "sendfile", "zip slip", "unzip", "untar", "extract archive", "user-supplied path", "file upload", "file uploads", "upload file", "upload files", "uploaded file", "uploaded files"],
+      "languages": [],
+      "summary": "confine the canonical path to a fixed base directory, or map input to known names; keep legitimate files reachable.",
+      "detect": "A path used to open, read, write, delete, serve or extract a file is built from untrusted input (a file name, a relative path, an archive entry name) without confirming that the resolved path stays inside the intended directory.",
+      "repair": "Where the files are a known set, map the input to an allowlisted name or ID. Otherwise join the input to a fixed base directory, canonicalize the result (resolving `..` and symlinks) and reject it unless it is still inside the base.",
+      "false_positives": "Do not flag if the path is a constant, comes from trusted configuration, or is already canonicalized and checked against the base directory before use; and never where the code touches no filesystem.",
+      "preserve": "Access to every legitimate file inside the base directory, including nested subdirectories where they were allowed, and the documented result for a missing or rejected path."
+    },
+    {
+      "id": "CWE-79",
+      "name": "Cross-site scripting (XSS)",
+      "keywords": ["xss", "cross-site scripting", "innerhtml", "dangerouslysetinnerhtml", "v-html", "document.write", "jinja", "jinja2", "html template", "render template", "user-generated content", "html output", "html response", "render html", "html page from"],
+      "languages": [],
+      "summary": "encode output for its HTML, attribute, script or URL context; keep the visible content and allowed markup.",
+      "detect": "Untrusted data is written into an HTML page, attribute, script block, URL or DOM sink (innerHTML, document.write) without encoding for that context, or auto-escaping is switched off for it.",
+      "repair": "Encode the value for the exact context it lands in (HTML body, attribute, JavaScript, URL) or leave the template engine's auto-escaping on; use text-only DOM APIs such as textContent. Where rich markup is required, pass it through a vetted sanitizer with an allowlist.",
+      "false_positives": "Do not flag if the response is not rendered by a browser as HTML (JSON or plain text with the matching Content-Type), if the value is a constant, or if an auto-escaping template already encodes it.",
+      "preserve": "The visible text and layout of the page, and any markup the feature is documented to allow."
+    },
+    {
+      "id": "CWE-94",
+      "name": "Code injection",
+      "keywords": ["code injection", "dynamic code", "arbitrary code", "dynamic import", "function constructor", "template injection", "ssti", "render_template_string", "evaluate expression", "expression evaluator", "math expression", "user-supplied code", "eval(", "eval()", "eval call", "uses eval", "use eval", "using eval", "exec("],
+      "languages": [],
+      "summary": "replace eval/exec and input-as-template with a parser or a fixed allowlist; keep the results for valid input.",
+      "detect": "Untrusted input reaches a dynamic-execution sink: eval, exec, a Function constructor, a dynamic import or require, or a template engine that compiles the input as a template instead of rendering it as data.",
+      "repair": "Remove the dynamic execution: parse the input with a dedicated parser or a literal-only evaluator for the small set of supported operations, or dispatch through a fixed allowlist of names. Pass untrusted values to templates as data, never as template source.",
+      "false_positives": "Do not flag if the evaluated code or template source is a constant or comes only from trusted configuration, and untrusted values enter solely as data.",
+      "preserve": "The set of inputs that were valid before and the values they evaluate to, and the documented result for invalid input."
+    },
+    {
+      "id": "CWE-502",
+      "name": "Deserialization of untrusted data",
+      "keywords": ["deserialize", "deserialization", "deserializing", "unserialize", "pickle", "unpickle", "yaml.load", "load yaml", "parse yaml", "yaml loader", "objectinputstream", "readobject", "binaryformatter", "jsonpickle", "serialized object"],
+      "languages": [],
+      "summary": "use a data-only parser (JSON, safe YAML) and validate the shape; keep the decoded structure for valid input.",
+      "detect": "Untrusted bytes or text are passed to a deserializer that can instantiate arbitrary types or run code while loading: pickle, Java native serialization, .NET BinaryFormatter, PHP unserialize, or YAML read with a full or unsafe loader.",
+      "repair": "Switch to a data-only format or loader (JSON, yaml.safe_load, a schema-bound decoder) and validate the decoded structure before use. If the native format must stay, restrict it to an allowlist of expected classes.",
+      "false_positives": "Do not flag if the data is read with a data-only parser (JSON, a safe YAML loader, protobuf), or if the serialized input is produced and stored by the application itself and is never attacker-writable.",
+      "preserve": "The decoded value's structure and types for valid input, the wire format other components already produce, and the documented result for malformed input."
+    },
+    {
+      "id": "CWE-918",
+      "name": "Server-side request forgery (SSRF)",
+      "keywords": ["ssrf", "server-side request forgery", "fetch url", "fetches url", "fetching url", "download url", "url fetcher", "webhook", "webhooks", "urlopen", "requests.get", "link preview", "url preview", "remote url", "user-supplied url", "outbound request"],
+      "languages": [],
+      "summary": "accept only allowlisted schemes and hosts, rechecked on every redirect; keep the intended destinations reachable.",
+      "detect": "The server makes an outbound request (HTTP, DNS, socket, cloud SDK) whose host, scheme, port or full URL is chosen by untrusted input.",
+      "repair": "Map the input to a fixed set of server-side destinations, or validate the parsed URL against a strict allowlist of schemes and hosts and apply the same check to every redirect hop. Where arbitrary public hosts must stay reachable, resolve the name and refuse loopback, link-local and private address ranges before connecting.",
+      "false_positives": "Do not flag if the destination host and scheme are constants or come from trusted configuration and untrusted input only fills an encoded path segment, query value or body; and never where the code makes no outbound request.",
+      "preserve": "Requests to every destination the feature is meant to reach, with the same method, headers, timeout and response handling."
+    },
+    {
+      "id": "CWE-601",
+      "name": "Open redirect",
+      "keywords": ["open redirect", "redirect url", "redirect uri", "redirect_uri", "redirect_url", "redirect user", "redirect users", "redirect back", "login redirect", "http redirect", "returnurl", "return_url", "return_to", "next url"],
+      "languages": [],
+      "summary": "redirect only to fixed routes, allowlisted URLs or same-site relative paths; keep the legitimate return-to flows.",
+      "detect": "The target of an HTTP redirect (a Location header, a framework redirect call, client-side navigation) is taken from untrusted input without restricting it to known destinations.",
+      "repair": "Redirect only to fixed internal routes or to a destination chosen from a server-side allowlist of exact URLs. If a caller-supplied target must be honored, accept only a relative path on the same site and reject absolute, scheme-relative (`//host`) and backslash-prefixed forms.",
+      "false_positives": "Do not flag if the redirect target is a constant, a server-generated route, or is checked against an allowlist of exact destinations; and never where the code performs no redirect.",
+      "preserve": "Every legitimate post-login or return-to flow, the status code used, and the query parameters that are passed through."
+    },
+    {
+      "id": "CWE-798",
+      "name": "Hard-coded credentials",
+      "keywords": ["hardcoded", "hard-coded", "hardcode", "api key", "api keys", "apikey", "api_key", "secrets", "secret key", "client secret", "access token", "auth token", "credentials", "connection string", "database password", "default password", "secret token", "shared secret"],
+      "languages": [],
+      "summary": "load secrets from the environment, a secret manager or a parameter, never a literal; keep the signature and call flow.",
+      "detect": "A real password, API key, token, private key or connection string appears as a literal in source code or as a default argument, instead of being supplied at run time.",
+      "repair": "Read the secret from an environment variable, a secret manager or a caller-supplied parameter, and fail clearly when it is missing instead of falling back to a built-in value.",
+      "false_positives": "Do not flag if the literal is an obvious placeholder, a test fixture, a public identifier (a client ID, a username, a key name) or the name of the environment variable that holds the secret.",
+      "preserve": "The function signature and the way callers obtain an authenticated client; only where the secret comes from changes."
+    },
+    {
+      "id": "CWE-327",
+      "name": "Broken or risky cryptography",
+      "keywords": ["md5", "sha1", "sha-1", "3des", "rc4", "ecb", "aes", "rsa", "hmac", "encrypt", "encryption", "decrypt", "cipher", "cryptography", "hash password", "hash passwords", "password hash", "password hashing", "tls", "ssl", "random token", "reset token", "salted hash", "password salt", "crypto library", "crypto module"],
+      "languages": [],
+      "summary": "keep the requested algorithm and output format; use adequate key sizes, fresh IVs, a CSPRNG and salted password hashing.",
+      "detect": "Security-relevant code uses a broken or under-parameterized primitive: MD5 or SHA-1 for integrity or signatures, a fast unsalted hash for passwords, DES, 3DES or RC4, ECB mode, a static or reused IV or nonce, short keys, a non-cryptographic random generator for secrets, or disabled certificate or protocol checks.",
+      "repair": "Keep the requested algorithm family and API contract and correct the parameters: adequate key sizes, an authenticated mode with a fresh random IV or nonce, a cryptographically secure random source, a dedicated password-hashing function with a per-password salt, and current TLS defaults with verification on. Use an established library, not hand-written primitives.",
+      "false_positives": "Do not flag if a weak hash serves only a non-security purpose (cache keys, checksums against accidental corruption, content addressing), or if the task explicitly fixes the algorithm and parameters for compatibility with an existing system.",
+      "preserve": "The algorithm, mode, iteration count, key size and output encoding the task specifies, and interoperability with data or peers that already depend on the format."
+    },
+    {
+      "id": "CWE-732",
+      "name": "Incorrect permission assignment",
+      "keywords": ["chmod", "os.chmod", "umask", "file permissions", "file permission", "file mode", "0777", "0666", "0o777", "0o666", "world-writable", "world writable", "world-readable", "world readable", "chmod 777"],
+      "languages": [],
+      "summary": "create files owner-only unless wider access is required; keep the path, contents and intended readers.",
+      "detect": "A file, directory, socket or key is created or changed with a mode that lets other users read or write it (0666, 0777, world-writable), or sensitive content is written with default permissions under a permissive umask.",
+      "repair": "Create the resource with the minimum mode it needs, set at creation time and not tightened afterwards: owner-only (0600 for files, 0700 for directories) unless the task states that wider access is required.",
+      "false_positives": "Do not flag if the task explicitly requires group or world access, if the file holds nothing sensitive and has to be shared (public web assets), or if the mode is already owner-only.",
+      "preserve": "The file's path, contents and ownership, and access for every user or service the task says must read or write it."
+    },
+    {
+      "id": "CWE-209",
+      "name": "Sensitive information in error messages",
+      "keywords": ["error response", "error responses", "error page", "error handler", "exception handler", "debug mode", "debug=true", "information disclosure", "information leak"],
+      "languages": [],
+      "summary": "log details server-side and return a generic error; keep status codes and the response shape.",
+      "detect": "An exception message, stack trace, SQL error, file path or internal identifier is returned to the client in a response body or header, or a framework debug mode that does so is left on for production use.",
+      "repair": "Log the full detail on the server and return a generic error with the same status code.",
+      "false_positives": "Do not flag if the detail goes only to a server-side log, a command-line tool's own stderr or a test, or if the returned message is a fixed, documented validation error that reveals no internals.",
+      "preserve": "The status codes, error codes and response shape callers depend on, and the documented validation messages."
+    },
+    {
+      "id": "CWE-117",
+      "name": "Log injection",
+      "keywords": ["log injection", "logging", "logger", "audit log", "access log", "log entry", "log message", "log line"],
+      "languages": [],
+      "summary": "strip CR/LF and control characters from logged input and mask secrets; keep the log format, levels and recorded events.",
+      "detect": "Untrusted input is written to a log with its line breaks or control characters intact, so an attacker can forge or split entries; or a secret (a password, token, key or session identifier) is logged in clear text.",
+      "repair": "Remove or encode CR, LF and other control characters in untrusted values before logging them, or use structured logging that encodes each field. Mask or omit secrets.",
+      "false_positives": "Do not flag if the logged value is a constant, a number or an enum, if the logger already encodes fields (JSON or key-value structured logging), or if the value is neither attacker-controlled nor secret.",
+      "preserve": "The log's format, level, field names and the events that are recorded, so existing parsers and alerts keep working."
+    },
+    {
+      "id": "CWE-113",
+      "name": "HTTP header injection",
+      "keywords": ["header injection", "response splitting", "crlf", "set-cookie", "set cookie", "response header", "response headers", "http header", "http headers", "custom header", "content-disposition", "location header"],
+      "languages": [],
+      "summary": "allowlist header values and reject CR/LF and control characters; keep the headers sent for valid input.",
+      "detect": "Untrusted input is placed in an HTTP header name or value (Set-Cookie, Location, Content-Disposition, a custom header) without removing CR and LF, so it can add headers or split the message.",
+      "repair": "Validate the value against a strict allowlist for that header and reject input that contains CR, LF or other control characters; build headers through the framework's API, not by writing raw header text.",
+      "false_positives": "Do not flag if the header value is a constant, a number or an allowlisted token, or if the HTTP library in use already rejects CR and LF in header values and the value reaches it unmodified.",
+      "preserve": "The header names and the values sent for valid input, including cookie attributes and filename encoding."
+    },
+    {
+      "id": "CWE-90",
+      "name": "LDAP injection",
+      "keywords": ["ldap", "ldap injection", "ldap filter", "ldapsearch", "active directory", "distinguished name"],
+      "languages": [],
+      "summary": "escape untrusted values for the LDAP filter or DN position, or use a parameterized filter API; keep the search scope and results.",
+      "detect": "Untrusted input is concatenated into an LDAP search filter or distinguished name without escaping the characters that are special in that position.",
+      "repair": "Escape each untrusted value with the LDAP library's filter-escaping or DN-escaping routine, matching the position it is used in, or build the filter with the library's parameterized filter API.",
+      "false_positives": "Do not flag if the filter and DN are constants, or if every untrusted component already passes through the library's escaping or parameterized-filter API.",
+      "preserve": "The search base, the scope, the attributes returned and the set of entries that legitimate values match."
+    },
+    {
+      "id": "CWE-643",
+      "name": "XPath injection",
+      "keywords": ["xpath", "xpath injection", "xpath expression", "xquery", "selectnodes", "xml query"],
+      "languages": [],
+      "summary": "keep the XPath expression constant and bind untrusted values as variables; keep the nodes selected for valid input.",
+      "detect": "Untrusted input is concatenated or formatted into an XPath or XQuery expression that is then evaluated.",
+      "repair": "Keep the expression constant and pass untrusted values through the library's XPath variable or parameter mechanism; if it has none, select with a fixed expression and compare the values in code.",
+      "false_positives": "Do not flag if the expression is a constant, or if untrusted values are supplied only as bound XPath variables.",
+      "preserve": "The nodes the query selects for legitimate values, and the order and type of the returned result."
+    },
+    {
+      "id": "CWE-1333",
+      "name": "Regular expression denial of service (ReDoS)",
+      "keywords": ["regex", "regexp", "regular expression", "regular expressions", "redos", "re.compile", "search pattern", "user-supplied pattern"],
+      "languages": [],
+      "summary": "treat user input as literal text and avoid nested quantifiers; keep exactly which strings match.",
+      "detect": "A regular expression with nested or overlapping quantifiers (such as `(a+)+` or `(a|a)*`) is matched against untrusted input, or the pattern itself is compiled from untrusted input.",
+      "repair": "Treat user input as literal text (escape it before embedding it in a pattern) or offer only a fixed set of server-defined patterns. Rewrite vulnerable patterns to remove nested and ambiguous quantifiers; where one is available, use a linear-time regex engine.",
+      "false_positives": "Do not flag if the pattern is a constant without nested or overlapping quantifiers, or if the input it is applied to is short, bounded and not attacker-controlled.",
+      "preserve": "The set of strings the pattern accepts and rejects, including anchoring and case sensitivity, and the capture groups callers read."
+    },
+    {
+      "id": "CWE-119",
+      "name": "Memory buffer bounds errors (C/C++)",
+      "keywords": ["buffer overflow", "stack buffer", "heap buffer", "strcpy", "strncpy", "strcat", "sprintf", "memcpy", "memmove", "malloc", "realloc", "alloca", "pointer arithmetic", "out-of-bounds", "out of bounds", "null terminator", "char array", "use after free", "double free"],
+      "languages": ["cpp"],
+      "summary": "bound every copy, index and size by the real buffer size; keep signatures, ownership and return values.",
+      "detect": "C or C++ code reads or writes memory outside an object's bounds: an unbounded copy or format (strcpy, strcat, sprintf, gets), a length or index taken from input without a check, an off-by-one on the terminator, an integer overflow in a size computation, or use of memory after it is freed.",
+      "repair": "Check every length and index against the destination's real size before the access, use the bounded form of the call and always terminate strings, compute sizes with overflow checks, and release each allocation exactly once on every path.",
+      "false_positives": "Do not flag if the size is provably bounded by the code shown (a constant-size copy into a larger fixed buffer, a length already validated on the same path), or if the code is in a memory-safe language.",
+      "preserve": "The function's signature, its ownership and lifetime conventions (who allocates and who frees), its return values and its output for inputs that fit, and the documented result for inputs that do not."
+    }
+  ]
+}

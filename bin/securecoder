@@ -29,7 +29,7 @@ Usage:
   securecoder config unset <key>              Remove the key from one scope
   securecoder config reset                    Remove every setting from one scope
   securecoder config init [--force]           Write a starter config (default scope: project)
-  securecoder config gitignore                Add .securecoder.local.json to .gitignore
+  securecoder config gitignore                Add .securecoder.local.json and .securecoder/ to .gitignore
   securecoder config path                     Print config file locations
   securecoder install-hooks <harness>         Install the hooks into a harness's own hook config
                                               (codex; use when plugin hooks don't load)
@@ -95,12 +95,13 @@ async function status(opts) {
 }
 
 async function doctor(opts) {
-  const { checkTools, nodeVersionOk } = require(path.join(lib, 'doctor.js'));
+  const { checkTools, nodeVersionOk, hookErrors } = require(path.join(lib, 'doctor.js'));
   const { cwd, root } = context(opts);
   const resolved = settings.resolve(cwd, { root });
   const tools = await checkTools(resolved.effective);
   const node = nodeVersionOk();
-  output(opts, { version: VERSION, node, tools, files: resolved.files, warnings: resolved.warnings }, report.renderDoctor(resolved, tools, node));
+  const errors = hookErrors(resolved.root);
+  output(opts, { version: VERSION, node, tools, files: resolved.files, warnings: resolved.warnings, hookErrors: errors }, report.renderDoctor(resolved, tools, node, { errors }));
 }
 
 function gitChangedFiles(root) {
@@ -225,7 +226,9 @@ async function config(opts) {
     }
     case 'gitignore': {
       const result = settings.ensureLocalGitignored(root);
-      return output(opts, result, result.changed ? `✓ Added .securecoder.local.json to ${result.file}` : `.securecoder.local.json is already ignored in ${result.file}`);
+      return output(opts, result, result.changed
+        ? `✓ Added ${result.added.join(' and ')} to ${result.file}`
+        : `${result.present.join(' and ')} are already ignored in ${result.file}`);
     }
     default:
       throw new UsageError(`Unknown config action "${action}"`);

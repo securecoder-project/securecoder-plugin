@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "securecoder",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Security-aware code generation: contract-preserving security constraints, SAST on every edit (syntax, semgrep, bandit; CodeQL on demand), and a guided remediation loop.",
   "author": {
     "name": "parsakaz",

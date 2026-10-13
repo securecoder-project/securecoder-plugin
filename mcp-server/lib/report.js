@@ -9,7 +9,7 @@ const { severityOf } = require('./severity');
 const { VERSION } = require('./version');
 
 const DASHBOARD_KEYS = [
-  'enabled', 'mode', 'severity_threshold', 'hooks.post_edit', 'hooks.shell_guard',
+  'enabled', 'mode', 'severity_threshold', 'hooks.post_edit', 'hooks.shell_guard', 'hooks.user_prompt',
   'analyzers', 'deep_analyzers', 'semgrep_config', 'retry.soft_limit', 'retry.hard_limit', 'exclude_patterns',
 ];
 
@@ -80,7 +80,7 @@ function renderDashboard(resolved, tools, { cliCommand } = {}) {
   return lines.join('\n');
 }
 
-function renderDoctor(resolved, tools, node) {
+function renderDoctor(resolved, tools, node, { errors = null } = {}) {
   const lines = [`## SecureCoder ${VERSION} doctor`, ''];
   lines.push(`- Node.js ${node.version}: ${node.ok ? '✓' : '✗ Node 18 or newer is required'}`);
   for (const t of tools) {
@@ -99,6 +99,12 @@ function renderDoctor(resolved, tools, node) {
     if (f.error) lines.push(`- ✗ ${scope} config \`${f.path}\` is invalid JSON: ${f.error}`);
   }
   for (const w of resolved.warnings) lines.push(`- ⚠ ${w}`);
+  if (errors) {
+    const { count, last, file } = errors;
+    const where = last.analyzer ? `${last.event}, analyzer ${last.analyzer}` : last.event;
+    lines.push(`- ⚠ ${count} hook error${count === 1 ? '' : 's'} logged in \`${file}\`: edits may be going unscanned. Delete the file once the cause is fixed.`);
+    lines.push(`  Most recent: ${last.ts} (${where}, SecureCoder ${last.version}): ${last.error}`);
+  }
   if (lines[lines.length - 1] === '') lines.push('- ✓ No configuration problems found.');
   return lines.join('\n');
 }

@@ -1,5 +1,5 @@
 {
-  "description": "SecureCoder hooks for Claude Code and Codex: fast SAST on edited files, and a high-signal shell command guard. Both read .securecoder.json settings and do nothing when SecureCoder is disabled.",
+  "description": "SecureCoder hooks for Claude Code and Codex: fast SAST on edited files, a high-signal shell command guard, and the core secure-coding constraints added to every prompt. All three read .securecoder.json settings and do nothing when SecureCoder is disabled.",
   "hooks": {
     "PostToolUse": [
       {
@@ -22,6 +22,17 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/securecoder-hook.js\" pre-shell",
             "timeout": 15
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/securecoder-hook.js\" user-prompt",
+            "timeout": 10
           }
         ]
       }

