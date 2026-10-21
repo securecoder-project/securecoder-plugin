@@ -4,7 +4,7 @@
 
 An [ATHENE](https://www.athene-center.de/) project by the Software Technology Group (STG) at TU Darmstadt. Analysis runs through a zero-dependency Node MCP server ported from the [SecureCoder](https://securecoder-project.github.io/) research engine.
 
-[![CI](https://github.com/parsakaz/securecoder-claude-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/parsakaz/securecoder-claude-plugin/actions/workflows/ci.yml)
+[![CI](https://github.com/securecoder-project/securecoder-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/securecoder-project/securecoder-plugin/actions/workflows/ci.yml)
 
 ---
 
@@ -58,16 +58,16 @@ Step-by-step instructions per agent, plus verification and troubleshooting, are 
 ### Claude Code
 
 ```shell
-/plugin marketplace add parsakaz/securecoder-claude-plugin
+/plugin marketplace add securecoder-project/securecoder-plugin
 /plugin install securecoder@securecoder
 ```
 
-Try it for one session without installing: `claude --plugin-dir /path/to/securecoder-claude-plugin`.
+Try it for one session without installing: `claude --plugin-dir /path/to/securecoder-plugin`.
 
 ### Codex
 
 ```shell
-codex plugin marketplace add parsakaz/securecoder-claude-plugin
+codex plugin marketplace add securecoder-project/securecoder-plugin
 codex plugin add securecoder@securecoder
 ```
 
@@ -78,7 +78,7 @@ Then start Codex and approve SecureCoder's hooks under `/hooks`. Codex requires 
 Load a checkout as a local plugin, then restart Cursor. It appears under **Customize**:
 
 ```shell
-git clone https://github.com/parsakaz/securecoder-claude-plugin ~/.cursor/plugins/local/securecoder
+git clone https://github.com/securecoder-project/securecoder-plugin ~/.cursor/plugins/local/securecoder
 ```
 
 Teams can also distribute it through a Cursor team marketplace, which supports this repository's `.cursor-plugin/` layout.
@@ -88,7 +88,7 @@ Teams can also distribute it through a Cursor team marketplace, which supports t
 Clone the repository, then add a one-line loader to your global (or project `.opencode/`) plugins folder:
 
 ```shell
-git clone https://github.com/parsakaz/securecoder-claude-plugin ~/.local/share/securecoder
+git clone https://github.com/securecoder-project/securecoder-plugin ~/.local/share/securecoder
 mkdir -p ~/.config/opencode/plugins
 printf 'export * from "%s";\nexport { default } from "%s";\n' \
   ~/.local/share/securecoder/opencode/index.js ~/.local/share/securecoder/opencode/index.js \
@@ -104,7 +104,7 @@ Run **Chat: Install Plugin From Source** from the Command Palette and paste the 
 ```json
 {
   "chat.pluginLocations": {
-    "/path/to/securecoder-claude-plugin": true
+    "/path/to/securecoder-plugin": true
   }
 }
 ```

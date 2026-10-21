@@ -187,6 +187,6 @@ All notable changes to SecureCoder are documented here. The format follows
 - Initial Claude Code plugin: prompt enrichment, post-write SAST hook, remediation agent, and the
   zero-dependency MCP server ported from the SecureCoder Kotlin engine.
 
-[0.3.0]: https://github.com/parsakaz/securecoder-claude-plugin/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/parsakaz/securecoder-claude-plugin/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/parsakaz/securecoder-claude-plugin/releases/tag/v0.1.0
+[0.3.0]: https://github.com/securecoder-project/securecoder-plugin/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/securecoder-project/securecoder-plugin/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/securecoder-project/securecoder-plugin/releases/tag/v0.1.0

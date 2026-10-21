@@ -8,9 +8,9 @@
   "homepage": "https://securecoder-project.github.io/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/parsakaz/securecoder-claude-plugin.git"
+    "url": "git+https://github.com/securecoder-project/securecoder-plugin.git"
   },
-  "bugs": "https://github.com/parsakaz/securecoder-claude-plugin/issues",
+  "bugs": "https://github.com/securecoder-project/securecoder-plugin/issues",
   "keywords": [
     "security",
     "sast",

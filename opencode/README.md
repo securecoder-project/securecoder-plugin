@@ -12,7 +12,7 @@ It has no dependencies and needs only Node-compatible built-ins (OpenCode runs p
 ## Install from a checkout
 
 ```shell
-git clone https://github.com/parsakaz/securecoder-claude-plugin ~/.local/share/securecoder
+git clone https://github.com/securecoder-project/securecoder-plugin ~/.local/share/securecoder
 mkdir -p ~/.config/opencode/plugins
 printf 'export * from "%s";\nexport { default } from "%s";\n' \
   ~/.local/share/securecoder/opencode/index.js ~/.local/share/securecoder/opencode/index.js \

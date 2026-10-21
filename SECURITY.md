@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report vulnerabilities privately through
-[GitHub security advisories](https://github.com/parsakaz/securecoder-claude-plugin/security/advisories/new).
+[GitHub security advisories](https://github.com/securecoder-project/securecoder-plugin/security/advisories/new).
 Don't open a public issue. Include the harness (Claude Code, Codex, Cursor, OpenCode) and version,
 the SecureCoder version (`securecoder --version`), and steps to reproduce. We aim to acknowledge
 reports within 5 business days.

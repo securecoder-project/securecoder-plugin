@@ -36,7 +36,7 @@ Two pieces of text exist in two places and are checked, so change both together:
 Every harness can load this repository in place. Replace `$SC` with the checkout path:
 
 ```bash
-SC=/path/to/securecoder-claude-plugin
+SC=/path/to/securecoder-plugin
 ```
 
 ### Claude Code
@@ -103,7 +103,7 @@ VS Code registers local plugins through a setting rather than a folder. Add to y
 ```json
 {
   "chat.pluginLocations": {
-    "/path/to/securecoder-claude-plugin": true
+    "/path/to/securecoder-plugin": true
   }
 }
 ```

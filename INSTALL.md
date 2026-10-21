@@ -55,7 +55,7 @@ repository is public, the same commands work for everyone with no extra setup.
 ### Claude Code
 
 ```
-/plugin marketplace add parsakaz/securecoder-claude-plugin
+/plugin marketplace add securecoder-project/securecoder-plugin
 /plugin install securecoder@securecoder
 ```
 
@@ -63,7 +63,7 @@ repository is public, the same commands work for everyone with no extra setup.
 instead of https, use the full URL:
 
 ```
-/plugin marketplace add git@github.com:parsakaz/securecoder-claude-plugin.git
+/plugin marketplace add git@github.com:securecoder-project/securecoder-plugin.git
 ```
 
 A marketplace name maps to exactly one source, so pick one form. To switch later, run
@@ -72,7 +72,7 @@ A marketplace name maps to exactly one source, so pick one form. To switch later
 Command-line equivalent, including a project-scoped install that your team gets automatically:
 
 ```bash
-claude plugin marketplace add parsakaz/securecoder-claude-plugin
+claude plugin marketplace add securecoder-project/securecoder-plugin
 claude plugin install securecoder@securecoder              # scope: user (default)
 claude plugin install securecoder@securecoder -s project   # committed to .claude/settings.json
 claude plugin list
@@ -81,13 +81,13 @@ claude plugin list
 To try it for one session without installing anything:
 
 ```bash
-claude --plugin-dir /path/to/securecoder-claude-plugin
+claude --plugin-dir /path/to/securecoder-plugin
 ```
 
 ### Codex
 
 ```bash
-codex plugin marketplace add parsakaz/securecoder-claude-plugin
+codex plugin marketplace add securecoder-project/securecoder-plugin
 codex plugin add securecoder@securecoder
 codex plugin list      # expect: installed, enabled
 codex mcp list         # expect: securecoder-analysis, enabled
@@ -130,7 +130,7 @@ feature), so clone into its local plugins directory:
 
 ```bash
 mkdir -p ~/.cursor/plugins/local
-git clone git@github.com:parsakaz/securecoder-claude-plugin.git ~/.cursor/plugins/local/securecoder
+git clone git@github.com:securecoder-project/securecoder-plugin.git ~/.cursor/plugins/local/securecoder
 ```
 
 Restart Cursor and look under **Customize → Plugins**. Cursor reads either
@@ -145,7 +145,7 @@ The `cursor-agent` CLI does not support plugins in older builds; use the Cursor 
 Command Palette → **Chat: Install Plugin From Source**, then paste:
 
 ```
-https://github.com/parsakaz/securecoder-claude-plugin
+https://github.com/securecoder-project/securecoder-plugin
 ```
 
 Or point VS Code at a local checkout in your user `settings.json`
@@ -154,7 +154,7 @@ Or point VS Code at a local checkout in your user `settings.json`
 ```json
 {
   "chat.pluginLocations": {
-    "/path/to/securecoder-claude-plugin": true
+    "/path/to/securecoder-plugin": true
   }
 }
 ```
@@ -173,7 +173,7 @@ OpenCode loads JavaScript plugins from a plugins folder. Clone the repository, t
 one-line loader that re-exports the adapter:
 
 ```bash
-git clone git@github.com:parsakaz/securecoder-claude-plugin.git ~/.local/share/securecoder
+git clone git@github.com:securecoder-project/securecoder-plugin.git ~/.local/share/securecoder
 mkdir -p ~/.config/opencode/plugins
 printf 'export * from "%s";\nexport { default } from "%s";\n' \
   ~/.local/share/securecoder/opencode/index.js ~/.local/share/securecoder/opencode/index.js \
@@ -459,5 +459,5 @@ the command is refused inside a project; see [Configuration](#configuration).
 | `jq` errors | Old versions shelled out to `jq`. Hooks have been pure Node since 0.2.0; update the plugin. |
 
 Still stuck? Run `securecoder doctor`, then open an issue with its output and your agent and
-version: <https://github.com/parsakaz/securecoder-claude-plugin/issues>. For anything with
+version: <https://github.com/securecoder-project/securecoder-plugin/issues>. For anything with
 security impact, follow [SECURITY.md](SECURITY.md) instead.
