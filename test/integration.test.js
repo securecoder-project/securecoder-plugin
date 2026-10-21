@@ -8,6 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { ROOT, cleanEnv, makeProject, pythonBinary, runNode } = require('./helpers');
 
 const HOOK = path.join(ROOT, 'hooks', 'securecoder-hook.js');
@@ -363,7 +364,7 @@ test('opencode: plugin registers MCP, commands, agent, and scans edits', { skip:
   const saved = { ...process.env };
   Object.assign(process.env, { SECURECODER_HOME: env.SECURECODER_HOME, PYTHON_BIN: env.PYTHON_BIN || 'python3' });
   try {
-    const mod = await import(path.join(ROOT, 'opencode', 'index.js'));
+    const mod = await import(pathToFileURL(path.join(ROOT, 'opencode', 'index.js')).href);
     assert.equal(mod.default.id, 'securecoder');
     assert.equal(mod.default.server, mod.SecureCoderPlugin);
     const hooks = await mod.SecureCoderPlugin({ client: {}, directory: root, worktree: root });
@@ -396,7 +397,7 @@ test('opencode: an exception in the post-edit scan is recorded and leaves the to
   process.env.SECURECODER_HOME = cleanEnv().SECURECODER_HOME;
   fs.chmodSync(path.join(root, 'secret.py'), 0o000);
   try {
-    const mod = await import(path.join(ROOT, 'opencode', 'index.js'));
+    const mod = await import(pathToFileURL(path.join(ROOT, 'opencode', 'index.js')).href);
     const hooks = await mod.SecureCoderPlugin({ client: {}, directory: root, worktree: root });
     const output = { title: '', output: 'ok', metadata: {} };
     await hooks['tool.execute.after']({ tool: 'write', sessionID: 's', callID: '1', args: { filePath: path.join(root, 'secret.py') } }, output);
