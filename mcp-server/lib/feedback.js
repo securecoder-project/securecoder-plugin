@@ -1,10 +1,32 @@
 // Port of engine/workflow FeedbackBuilder.kt — turns guardian violations into
 // remediation feedback for the coding agent: dedup + prioritization, per-rule
 // targeted guidance, and numbered code snippets around each finding.
+//
+// Unlike the engine's builder, the output is split in two. Hard rejects (the
+// file does not parse) are mandatory. Everything else is presented as hints to
+// weigh: telling the agent to fix every finding makes it patch false positives
+// and change behavior it should have left alone. The split is fixed, not a
+// setting.
 
 'use strict';
 
-// Curated remediation hints per rule id, ported verbatim from FeedbackBuilder.hintForRule.
+// Section headings and preambles. Plain text, stable strings: this is read raw
+// by a model and matched by tests.
+const MUST_FIX_HEADING = 'MUST FIX';
+const WEIGH_HEADING = 'WEIGH THESE';
+const MUST_FIX_PREAMBLE = 'Each of these means a file does not parse or compile. Fix them first: nothing else can be judged until every file parses.';
+// The rule for every finding that is not a hard reject. The post-edit hook's
+// advisory suffix (hook-io.js) reuses it so both channels say the same thing.
+const TRIAGE_RULE = 'Weigh each one against the code: fix it if it is a real, exploitable issue you can fix without changing documented behavior; otherwise do not patch it, and say why you are dismissing it ("false positive because …").';
+const WEIGH_PREAMBLE = `These are analyzer hints, not verdicts. ${TRIAGE_RULE}`;
+// Per-rule hints are advice on how to fix, not a reason to fix; the label in
+// the hints section says so.
+const GUIDANCE_LABEL = 'Targeted guidance:';
+const WEIGH_GUIDANCE_LABEL = 'Targeted guidance for the ones you fix:';
+
+// Curated remediation hints per rule id, ported from FeedbackBuilder.hintForRule.
+// The *-syntax hints are reworded: the engine asked an LLM to resend a whole
+// file, while here the agent edits real files on disk.
 function hintForRule(ruleId) {
   if (ruleId === 'py/stack-trace-exposure') {
     return 'Do not return exception messages or stack traces to the client. Log details internally and send a generic error response.';
@@ -18,26 +40,20 @@ function hintForRule(ruleId) {
   if (ruleId === 'py/polynomial-redos' || ruleId === 'py/redos' || ruleId.includes('redos') || ruleId.includes('regex-injection')) {
     return 'Avoid compiling or executing user-controlled regular expressions. Treat user input as literal text, use a strict allowlist parser, or support only a fixed set of server-defined patterns.';
   }
-  if (ruleId === 'source-escaped-output') {
-    return 'Do not return code as an escaped string blob with literal \\n sequences. Send the real source file contents with actual newlines.';
-  }
-  if (ruleId === 'source-placeholder-output') {
-    return "Do not return placeholders like '...' or '(same code)'. Send the complete final source file.";
-  }
   if (ruleId === 'python-syntax') {
-    return 'The Python file does not parse. Fix the syntax error and resend the complete file with valid Python syntax.';
+    return 'The Python file does not parse. Fix the syntax error.';
   }
   if (ruleId === 'javascript-syntax') {
-    return 'The JavaScript file does not parse. Fix the syntax error and resend the complete file, not an explanation or escaped string.';
+    return 'The JavaScript file does not parse. Fix the syntax error.';
   }
   if (ruleId === 'go-syntax') {
-    return 'The Go file does not parse. Fix the syntax error and resend the complete file with valid Go syntax.';
+    return 'The Go file does not parse. Fix the syntax error.';
   }
   if (ruleId === 'c-syntax') {
-    return 'The C file does not compile cleanly. Fix the syntax error and resend the complete file with valid C syntax.';
+    return 'The C file does not compile. Fix the syntax error.';
   }
   if (ruleId === 'cpp-syntax') {
-    return 'The C++ file does not compile cleanly. Fix the syntax error and resend the complete file with valid C++ syntax.';
+    return 'The C++ file does not compile. Fix the syntax error.';
   }
   if (ruleId.includes('path-injection')) {
     return 'Do not keep iterating on basename/realpath/commonpath/startswith checks alone. Replace user-controlled file paths with a server-side allowlist or map user input to fixed known files or IDs instead of opening arbitrary paths.';
@@ -107,22 +123,21 @@ function makeSnippet(fileContent, startLine, endLine, linesAround) {
   return out.join('\n');
 }
 
-// violations: Violation[]; fileContents: Map<rel path, content>
-function buildFeedback(violations, fileContents, { maxListedViolations = 20, linesAround = 6 } = {}) {
-  const lines = [];
-  lines.push(`Security analysis found ${violations.length} violation(s). Address all of them.`);
+// One section: heading with its count, preamble, the de-duplicated hints for
+// the rules in it, then the listed entries. `firstNumber` keeps the numbering
+// continuous across sections so "finding 3" is unambiguous.
+function renderSection({ heading, preamble, guidanceLabel, violations, listed, firstNumber }, fileContents, linesAround) {
+  const lines = [`${heading} (${violations.length})`, preamble];
   const ruleHints = [...new Set(violations.map((v) => v.rule.id))]
     .map(hintForRule)
     .filter(Boolean);
   if (ruleHints.length > 0) {
-    lines.push('Targeted guidance:');
+    lines.push(guidanceLabel);
     for (const hint of [...new Set(ruleHints)]) lines.push(`- ${hint}`);
   }
-  const prioritized = prioritizeViolations(violations);
-  const listed = prioritized.slice(0, maxListedViolations);
   listed.forEach((v, idx) => {
     const loc = [v.location.file, v.location.startLine].filter((x) => x != null).join(':');
-    lines.push(`${idx + 1}. [${v.rule.id}] ${v.message} @ ${loc}`);
+    lines.push(`${firstNumber + idx}. [${v.rule.id}] ${v.message} @ ${loc}`);
     const content = fileContents.get(v.location.file);
     if (content != null) {
       lines.push(`SNIPPET: ${v.location.file}`);
@@ -131,10 +146,58 @@ function buildFeedback(violations, fileContents, { maxListedViolations = 20, lin
       lines.push('>>>');
     }
   });
-  if (prioritized.length > listed.length) {
-    lines.push(`…and ${prioritized.length - listed.length} more`);
+  return lines;
+}
+
+// violations: Violation[]; fileContents: Map<rel path, content>
+function buildFeedback(violations, fileContents, { maxListedViolations = 20, linesAround = 6 } = {}) {
+  const prioritized = prioritizeViolations(violations);
+  const mustFix = prioritized.filter((v) => v.hardReject === true);
+  const weigh = prioritized.filter((v) => v.hardReject !== true);
+  // Hard rejects are always listed; the cap only ever trims the weigh section.
+  const weighListed = weigh.slice(0, Math.max(0, maxListedViolations - mustFix.length));
+
+  const counts = [];
+  if (mustFix.length > 0) counts.push(`${mustFix.length} must be fixed`);
+  if (weigh.length > 0) counts.push(`${weigh.length} to weigh`);
+  const lines = [`Security analysis found ${prioritized.length} finding(s)${counts.length > 0 ? `: ${counts.join(', ')}` : ''}.`];
+
+  if (mustFix.length > 0) {
+    lines.push('');
+    lines.push(...renderSection({
+      heading: MUST_FIX_HEADING,
+      preamble: MUST_FIX_PREAMBLE,
+      guidanceLabel: GUIDANCE_LABEL,
+      violations: mustFix,
+      listed: mustFix,
+      firstNumber: 1,
+    }, fileContents, linesAround));
+  }
+  if (weigh.length > 0) {
+    lines.push('');
+    lines.push(...renderSection({
+      heading: WEIGH_HEADING,
+      preamble: WEIGH_PREAMBLE,
+      guidanceLabel: WEIGH_GUIDANCE_LABEL,
+      violations: weigh,
+      listed: weighListed,
+      firstNumber: mustFix.length + 1,
+    }, fileContents, linesAround));
+    if (weigh.length > weighListed.length) {
+      lines.push(`…and ${weigh.length - weighListed.length} more`);
+    }
   }
   return lines.join('\n');
 }
 
-module.exports = { buildFeedback, prioritizeViolations, hintForRule, violationKey };
+module.exports = {
+  buildFeedback,
+  prioritizeViolations,
+  hintForRule,
+  violationKey,
+  MUST_FIX_HEADING,
+  WEIGH_HEADING,
+  MUST_FIX_PREAMBLE,
+  WEIGH_PREAMBLE,
+  TRIAGE_RULE,
+};

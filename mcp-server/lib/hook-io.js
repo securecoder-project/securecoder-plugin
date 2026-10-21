@@ -6,6 +6,7 @@
 //   Codex        PostToolUse apply_patch           tool_input.command = "*** Begin Patch …"
 //   Cursor       postToolUse Write/Edit/…          tool_input.file_path | path | target_file
 //   OpenCode     tool.execute.after write/edit/…   args.filePath | args.patchText
+//   Claude Code, Codex  UserPromptSubmit           prompt
 //
 // Claude Code and Codex share one output format (hookSpecificOutput); Cursor
 // uses flat snake_case fields; the OpenCode plugin gets plain text to splice
@@ -14,6 +15,7 @@
 'use strict';
 
 const path = require('path');
+const { TRIAGE_RULE } = require('./feedback');
 
 const PATCH_FILE_LINE = /^\*\*\* (Add|Update|Delete) File: (.+?)\s*$/;
 const PATCH_MOVE_LINE = /^\*\*\* Move to: (.+?)\s*$/;
@@ -63,6 +65,12 @@ function extractShellCommand(payload) {
   return command;
 }
 
+// The text the user submitted (Claude Code and Codex UserPromptSubmit). For a
+// slash command this is the raw "/name args", not the expanded body.
+function extractPrompt(payload) {
+  return payload && typeof payload === 'object' && typeof payload.prompt === 'string' ? payload.prompt : '';
+}
+
 function payloadCwd(payload, env = process.env) {
   const roots = payload && Array.isArray(payload.workspace_roots) ? payload.workspace_roots : [];
   return (payload && typeof payload.cwd === 'string' && payload.cwd)
@@ -89,7 +97,9 @@ function resolveProjectPaths(paths, { cwd, root }) {
 // ── output dialects ─────────────────────────────────────────────────────────
 
 const ENFORCE_SUFFIX = 'SecureCoder is in enforce mode: fix these findings before continuing with other work, then re-check the file (securecoder_analyze with a session id tracks progress). Do not change SecureCoder settings to silence them.';
-const ADVISORY_SUFFIX = 'Fix these before moving on unless they are false positives; if so, say why. For a guided fix-and-recheck loop, delegate to the securecoder-remediator agent or call securecoder_analyze with a stable session id.';
+// Advisory mode shares its triage wording with securecoder_analyze feedback
+// (feedback.js): only hard rejects are an obligation, the rest are weighed.
+const ADVISORY_SUFFIX = `Findings marked hard-reject (the file does not parse) must be fixed; the rest are analyzer hints, not verdicts. ${TRIAGE_RULE} For a guided fix-and-recheck loop, delegate to the securecoder-remediator agent or call securecoder_analyze with a stable session id.`;
 
 function postEditResponse({ platform, mode, findingsText }) {
   if (!findingsText) return null;
@@ -120,12 +130,24 @@ function preShellResponse({ platform, mode, hits }) {
   return { hookSpecificOutput };
 }
 
+// Only Claude Code and Codex can add context to a submitted prompt. Cursor's
+// beforeSubmitPrompt can allow or block and nothing else, and OpenCode has no
+// documented per-prompt hook, so for those two there is no honest response to
+// give. Codex validates this object against a closed schema, so it carries
+// exactly these two keys.
+function userPromptResponse({ platform, context }) {
+  if (!context || platform === 'cursor' || platform === 'opencode') return null;
+  return { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: context } };
+}
+
 module.exports = {
   patchPaths,
   extractEditedPaths,
   extractShellCommand,
+  extractPrompt,
   payloadCwd,
   resolveProjectPaths,
   postEditResponse,
   preShellResponse,
+  userPromptResponse,
 };

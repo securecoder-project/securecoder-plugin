@@ -8,6 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { ROOT, cleanEnv, makeProject, pythonBinary, runNode } = require('./helpers');
 
 const HOOK = path.join(ROOT, 'hooks', 'securecoder-hook.js');
@@ -16,8 +17,29 @@ const PYTHON = pythonBinary();
 const SYNTAX_ONLY = { analyzers: ['syntax'] };
 const BROKEN_PY = 'def broken(:\n    pass\n';
 
+// chmod-based tests mean nothing on Windows or for root, which ignores modes.
+const NO_CHMOD = (process.platform === 'win32' || (process.getuid && process.getuid() === 0)) && 'needs POSIX permissions as a non-root user';
+
 function envWithPython(extra = {}) {
   return cleanEnv({ ...(PYTHON ? { PYTHON_BIN: PYTHON } : {}), ...extra });
+}
+
+// The hook writes its error trail under the project root it resolves, which is
+// the process cwd when the payload names none. Every run below that can fail
+// therefore gets a temp project as cwd, and the last test in this file checks
+// that nothing leaked into the repository (where *.log is gitignored, so git
+// would not show it).
+const OWN_TRAILS = [...new Set([ROOT, process.cwd()])].map((dir) => path.join(dir, '.securecoder', 'errors.log'));
+const ownTrailSizes = () => OWN_TRAILS.map((file) => (fs.existsSync(file) ? fs.statSync(file).size : null));
+const OWN_TRAILS_BEFORE = ownTrailSizes();
+
+function trailFile(root) {
+  return path.join(root, '.securecoder', 'errors.log');
+}
+
+function readTrail(root) {
+  if (!fs.existsSync(trailFile(root))) return [];
+  return fs.readFileSync(trailFile(root), 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
 }
 
 test('hook: Claude Code Write of an unparseable file injects additionalContext', { skip: !PYTHON && 'python not installed' }, () => {
@@ -76,10 +98,131 @@ test('hook: fails open on garbage input, unknown events, and files outside the p
     [['no-such-event'], '{}'],
     [['post-edit'], JSON.stringify({ cwd: root, tool_input: { file_path: path.join(path.dirname(root), 'elsewhere.py') } })],
   ]) {
-    const r = runNode(HOOK, args, { input, env });
+    const r = runNode(HOOK, args, { input, env, cwd: root });
     assert.equal(r.status, 0);
     assert.equal(r.stdout, '');
   }
+});
+
+test('hook: a failing analyzer is recorded in the error trail and the hook still exits 0 with no output', { skip: !PYTHON && 'python not installed' }, () => {
+  const root = makeProject({ files: { 'app.py': 'x = 1\n' }, config: SYNTAX_ONLY });
+  // The syntax guardian checks a copy in a temp dir; with no usable temp dir
+  // it rejects, which analyze() isolates into result.failures.
+  const nowhere = path.join(root, 'no-such-tmp');
+  const r = runNode(HOOK, ['post-edit'], {
+    input: JSON.stringify({ cwd: root, tool_name: 'Write', tool_input: { file_path: path.join(root, 'app.py') } }),
+    env: envWithPython({ TMPDIR: nowhere, TMP: nowhere, TEMP: nowhere }),
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, '');
+
+  const raw = fs.readFileSync(trailFile(root), 'utf8');
+  assert.match(raw, /^\{.*\}\n$/, 'one JSON object on one line');
+  const [entry] = readTrail(root);
+  assert.deepEqual(Object.keys(entry), ['ts', 'event', 'analyzer', 'error', 'version']);
+  assert.equal(entry.event, 'post-edit');
+  assert.equal(entry.analyzer, 'syntax');
+  assert.match(entry.error, /mkdtemp/);
+  assert.equal(entry.version, require('../package.json').version);
+  assert.equal(new Date(entry.ts).toISOString(), entry.ts);
+});
+
+test('hook: malformed and empty payloads and unknown events are recorded, with nothing on stdout', () => {
+  const root = makeProject();
+  const env = cleanEnv();
+  // None of these payloads names a project, so the entry lands in the cwd's.
+  for (const [args, input] of [
+    [['post-edit'], 'this is not json'],
+    [['pre-shell'], ''],
+    [['no-such-event'], '{}'],
+  ]) {
+    const r = runNode(HOOK, args, { input, env, cwd: root });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, '');
+  }
+  const entries = readTrail(root);
+  assert.deepEqual(entries.map((e) => [e.event, e.error]), [
+    ['post-edit', 'hook payload is not JSON (16 chars)'],
+    ['pre-shell', 'hook payload is empty'],
+    ['no-such-event', 'unknown hook event "no-such-event"'],
+  ]);
+  for (const entry of entries) assert.deepEqual(Object.keys(entry), ['ts', 'event', 'error', 'version']);
+
+  // The harness's project variable wins over the cwd, as it does for scans.
+  const other = makeProject();
+  const r = runNode(HOOK, ['post-edit'], { input: '{ broken', env: { ...env, SECURECODER_PROJECT_DIR: other }, cwd: root });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(readTrail(other).length, 1);
+  assert.equal(readTrail(root).length, 3);
+});
+
+test('hook: an exception during the scan is recorded and the hook still fails open', { skip: NO_CHMOD }, () => {
+  const root = makeProject({ files: { 'secret.py': 'x = 1\n' }, config: SYNTAX_ONLY });
+  fs.chmodSync(path.join(root, 'secret.py'), 0o000);
+  try {
+    const r = runNode(HOOK, ['post-edit'], {
+      input: JSON.stringify({ cwd: root, tool_input: { file_path: 'secret.py' } }),
+      env: cleanEnv(),
+    });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, '');
+    assert.match(r.stderr, /hook error \(ignored\)/);
+  } finally {
+    fs.chmodSync(path.join(root, 'secret.py'), 0o644);
+  }
+  const [entry, ...rest] = readTrail(root);
+  assert.equal(rest.length, 0);
+  assert.equal(entry.event, 'post-edit');
+  assert.match(entry.error, /^Error: EACCES/);
+  assert.ok(!entry.error.includes('\n') && !/\bat .*:\d+:\d+/.test(entry.error), 'no stack trace');
+});
+
+test('hook: a read-only project root does not break the hook', { skip: NO_CHMOD }, () => {
+  const root = makeProject();
+  fs.chmodSync(root, 0o555);
+  try {
+    const r = runNode(HOOK, ['post-edit'], { input: 'this is not json', env: cleanEnv(), cwd: root });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, '');
+    assert.equal(fs.existsSync(path.join(root, '.securecoder')), false);
+  } finally {
+    fs.chmodSync(root, 0o755);
+  }
+});
+
+test('hook: a .securecoder that is a file, or a read-only one, does not break the hook', () => {
+  const env = cleanEnv();
+  const blocked = makeProject({ files: { '.securecoder': 'not a directory\n' } });
+  let r = runNode(HOOK, ['post-edit'], { input: 'this is not json', env, cwd: blocked });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, '');
+  assert.equal(fs.readFileSync(path.join(blocked, '.securecoder'), 'utf8'), 'not a directory\n');
+
+  if (NO_CHMOD) return;
+  const locked = makeProject({ files: { '.securecoder/errors.log': '' } });
+  fs.chmodSync(trailFile(locked), 0o444);
+  fs.chmodSync(path.join(locked, '.securecoder'), 0o555);
+  try {
+    r = runNode(HOOK, ['no-such-event'], { input: '{}', env, cwd: locked });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, '');
+    assert.equal(fs.readFileSync(trailFile(locked), 'utf8'), '');
+  } finally {
+    fs.chmodSync(path.join(locked, '.securecoder'), 0o755);
+    fs.chmodSync(trailFile(locked), 0o644);
+  }
+});
+
+test('hook: a copy without its library still exits 0 silently on every error path', () => {
+  // A broken install: the hook script alone, so recording the error fails too.
+  const root = makeProject({ files: { 'plugin/hooks/securecoder-hook.js': fs.readFileSync(HOOK, 'utf8') } });
+  const orphan = path.join(root, 'plugin', 'hooks', 'securecoder-hook.js');
+  for (const input of ['this is not json', '', JSON.stringify({ cwd: root, tool_input: { file_path: 'a.py' } })]) {
+    const r = runNode(orphan, ['post-edit'], { input, env: cleanEnv(), cwd: root });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, '');
+  }
+  assert.equal(fs.existsSync(path.join(root, '.securecoder')), false);
 });
 
 test('hook: shell guard advisory and enforce', () => {
@@ -146,6 +289,42 @@ test('cli: status and doctor render without optional analyzers installed', () =>
   assert.ok(Array.isArray(json.tools));
 });
 
+test('cli: doctor reports the hook error trail, and nothing when it is absent or empty', () => {
+  const root = makeProject({ config: SYNTAX_ONLY });
+  const env = cleanEnv({ SEMGREP_BIN: 'securecoder-missing-semgrep', BANDIT_BIN: 'securecoder-missing-bandit', CODEQL_BIN: 'securecoder-missing-codeql' });
+  const doctor = (...args) => runNode(CLI, ['doctor', ...args], { env, cwd: root });
+
+  const absent = doctor();
+  assert.equal(absent.status, 0, absent.stderr);
+  assert.doesNotMatch(absent.stdout, /hook error|errors\.log/);
+  assert.match(absent.stdout, /✓ No configuration problems found\.\n$/);
+  assert.equal(JSON.parse(doctor('--json').stdout).hookErrors, null);
+
+  fs.mkdirSync(path.join(root, '.securecoder'));
+  fs.writeFileSync(trailFile(root), '');
+  const empty = doctor();
+  assert.doesNotMatch(empty.stdout, /hook error|errors\.log/);
+  assert.match(empty.stdout, /✓ No configuration problems found\.\n$/);
+
+  runNode(HOOK, ['post-edit'], { input: 'this is not json', env, cwd: root });
+  const one = doctor();
+  assert.match(one.stdout, /- ⚠ 1 hook error logged in `.*errors\.log`/);
+
+  runNode(HOOK, ['post-edit'], { input: '', env, cwd: root });
+  runNode(HOOK, ['no-such-event'], { input: '{}', env, cwd: root });
+  const version = require('../package.json').version.replace(/\./g, '\\.');
+  const three = doctor();
+  assert.equal(three.status, 0, three.stderr);
+  assert.ok(three.stdout.includes(`- ⚠ 3 hook errors logged in \`${trailFile(root)}\``), three.stdout);
+  assert.match(three.stdout, new RegExp(`Most recent: \\d{4}-\\d\\d-\\d\\dT[\\d:.]+Z \\(no-such-event, SecureCoder ${version}\\): unknown hook event "no-such-event"\n$`));
+  assert.doesNotMatch(three.stdout, /No configuration problems found/);
+
+  const json = JSON.parse(doctor('--json').stdout).hookErrors;
+  assert.equal(json.count, 3);
+  assert.equal(json.file, trailFile(root));
+  assert.equal(json.last.event, 'no-such-event');
+});
+
 test('cli: scan exits 1 on findings and 0 when clean', { skip: !PYTHON && 'python not installed' }, () => {
   const root = makeProject({ files: { 'bad.py': BROKEN_PY, 'good.py': 'x = 1\n' }, config: SYNTAX_ONLY });
   const env = envWithPython();
@@ -185,7 +364,7 @@ test('opencode: plugin registers MCP, commands, agent, and scans edits', { skip:
   const saved = { ...process.env };
   Object.assign(process.env, { SECURECODER_HOME: env.SECURECODER_HOME, PYTHON_BIN: env.PYTHON_BIN || 'python3' });
   try {
-    const mod = await import(path.join(ROOT, 'opencode', 'index.js'));
+    const mod = await import(pathToFileURL(path.join(ROOT, 'opencode', 'index.js')).href);
     assert.equal(mod.default.id, 'securecoder');
     assert.equal(mod.default.server, mod.SecureCoderPlugin);
     const hooks = await mod.SecureCoderPlugin({ client: {}, directory: root, worktree: root });
@@ -212,6 +391,28 @@ test('opencode: plugin registers MCP, commands, agent, and scans edits', { skip:
   }
 });
 
+test('opencode: an exception in the post-edit scan is recorded and leaves the tool result alone', { skip: NO_CHMOD }, async () => {
+  const root = makeProject({ files: { 'secret.py': 'x = 1\n' }, config: SYNTAX_ONLY });
+  const saved = { ...process.env };
+  process.env.SECURECODER_HOME = cleanEnv().SECURECODER_HOME;
+  fs.chmodSync(path.join(root, 'secret.py'), 0o000);
+  try {
+    const mod = await import(pathToFileURL(path.join(ROOT, 'opencode', 'index.js')).href);
+    const hooks = await mod.SecureCoderPlugin({ client: {}, directory: root, worktree: root });
+    const output = { title: '', output: 'ok', metadata: {} };
+    await hooks['tool.execute.after']({ tool: 'write', sessionID: 's', callID: '1', args: { filePath: path.join(root, 'secret.py') } }, output);
+    assert.equal(output.output, 'ok');
+  } finally {
+    fs.chmodSync(path.join(root, 'secret.py'), 0o644);
+    for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+    Object.assign(process.env, saved);
+  }
+  const entries = readTrail(root);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].event, 'post-edit');
+  assert.match(entries[0].error, /^Error: EACCES/);
+});
+
 test('install-hooks merges into a harness hook config without touching other entries', () => {
   const harnessHooks = require('../mcp-server/lib/harness-hooks');
   const root = makeProject({ files: { '.codex/hooks.json': JSON.stringify({ hooks: { PostToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'echo mine' }] }] }, other: true }) } });
@@ -219,21 +420,24 @@ test('install-hooks merges into a harness hook config without touching other ent
   const read = () => JSON.parse(fs.readFileSync(path.join(root, '.codex', 'hooks.json'), 'utf8'));
 
   const first = harnessHooks.install('codex', { scope: 'project', root, env });
-  assert.deepEqual(first.events, ['PostToolUse', 'PreToolUse']);
+  assert.deepEqual(first.events, ['PostToolUse', 'PreToolUse', 'UserPromptSubmit']);
   let data = read();
   assert.equal(data.other, true, 'unrelated keys survive');
   assert.equal(data.hooks.PostToolUse.length, 2, 'existing group kept');
   assert.equal(data.hooks.PostToolUse[0].hooks[0].command, 'echo mine');
   const ours = data.hooks.PostToolUse[1];
   assert.equal(ours.matcher, 'Write|Edit|MultiEdit|apply_patch');
-  assert.deepEqual(ours.hooks[0].args, [path.join(ROOT, 'hooks', 'securecoder-hook.js'), 'post-edit']);
+  // One shell-form string: Codex has no `args` field and would run bare `node`.
+  assert.deepEqual(Object.keys(ours.hooks[0]), ['type', 'command', 'timeout', 'statusMessage']);
+  assert.match(ours.hooks[0].command, /^node ".*securecoder-hook\.js" post-edit$/);
+  assert.ok(ours.hooks[0].command.includes(path.basename(ROOT)));
 
   harnessHooks.install('codex', { scope: 'project', root, env });
   data = read();
   assert.equal(data.hooks.PostToolUse.length, 2, 'reinstall replaces rather than duplicates');
 
   const removed = harnessHooks.remove('codex', { scope: 'project', root, env });
-  assert.equal(removed.removed, 2);
+  assert.equal(removed.removed, 3);
   data = read();
   assert.deepEqual(Object.keys(data.hooks), ['PostToolUse']);
   assert.equal(data.hooks.PostToolUse.length, 1);
@@ -249,4 +453,8 @@ test('install-hooks refuses to clobber a malformed harness hook config', () => {
   const root = makeProject({ files: { '.codex/hooks.json': '{ broken' } });
   assert.throws(() => harnessHooks.install('codex', { scope: 'project', root, env: cleanEnv() }), /not valid JSON/);
   assert.equal(fs.readFileSync(path.join(root, '.codex', 'hooks.json'), 'utf8'), '{ broken');
+});
+
+test('no test in this file left an error trail in the repository or the working directory', () => {
+  assert.deepEqual(ownTrailSizes(), OWN_TRAILS_BEFORE);
 });

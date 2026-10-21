@@ -85,6 +85,30 @@ test('post-edit responses use each harness dialect', () => {
   assert.deepEqual(Object.keys(io.postEditResponse({ platform: 'opencode', mode: 'advisory', findingsText: 'F' })), ['text']);
 });
 
+test('advisory suffix asks the model to weigh findings; enforce stays strict', () => {
+  const { TRIAGE_RULE } = require('../mcp-server/lib/feedback');
+  const text = (platform, mode) => {
+    const r = io.postEditResponse({ platform, mode, findingsText: 'F' });
+    return r.additional_context || r.text || r.reason || r.hookSpecificOutput.additionalContext;
+  };
+
+  for (const platform of ['claude', 'codex', 'cursor', 'opencode']) {
+    const advisory = text(platform, 'advisory');
+    // Hard rejects stay an obligation; everything else uses the same triage
+    // sentence as securecoder_analyze feedback.
+    assert.match(advisory, /hard-reject \(the file does not parse\) must be fixed/, platform);
+    assert.ok(advisory.includes(TRIAGE_RULE), platform);
+    assert.match(advisory, /securecoder-remediator agent or call securecoder_analyze with a stable session id\.$/, platform);
+    assert.doesNotMatch(advisory, /Fix these before moving on|enforce mode/, platform);
+
+    assert.equal(
+      text(platform, 'enforce'),
+      'F\n\nSecureCoder is in enforce mode: fix these findings before continuing with other work, then re-check the file (securecoder_analyze with a session id tracks progress). Do not change SecureCoder settings to silence them.',
+      platform,
+    );
+  }
+});
+
 test('pre-shell responses: advisory informs, enforce asks, never silently denies', () => {
   const hits = [{ id: 'x', title: 'T', advice: 'A' }];
   assert.equal(io.preShellResponse({ platform: 'claude', mode: 'enforce', hits: [] }), null);

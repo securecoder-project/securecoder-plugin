@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "securecoder",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "description": "An ATHENE project by STG at TU Darmstadt. Security-aware code generation: constraint injection, post-edit SAST, and iterative remediation.",
       "author": {
         "name": "parsakaz",

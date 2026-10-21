@@ -47,14 +47,4 @@ function run(args, { cwd, env, timeoutMs = 120000 } = {}) {
   });
 }
 
-// True if the binary exists and runs `--version` (or given probe args).
-async function available(binary, probeArgs = ['--version']) {
-  try {
-    const { code } = await run([binary, ...probeArgs], { timeoutMs: 15000 });
-    return code === 0;
-  } catch {
-    return false;
-  }
-}
-
-module.exports = { run, available, sanitizedEnv };
+module.exports = { run, sanitizedEnv };

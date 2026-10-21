@@ -15,7 +15,7 @@ const { enrichPrompt } = require('./lib/enricher');
 const { resetSession } = require('./lib/retry');
 const settings = require('./lib/settings');
 const report = require('./lib/report');
-const { checkTools, nodeVersionOk } = require('./lib/doctor');
+const { checkTools, nodeVersionOk, hookErrors } = require('./lib/doctor');
 const { severityOf } = require('./lib/severity');
 const { VERSION, PLUGIN_ROOT } = require('./lib/version');
 
@@ -81,7 +81,7 @@ const TOOLS = [
     name: 'securecoder_analyze',
     title: 'Analyze files for security issues',
     description:
-      'Run the SecureCoder security guardian pipeline on source files. Fast guardians (syntax hard-reject checks, semgrep, bandit) always run; pass deep=true to also run CodeQL (slow: builds a CodeQL database, can take minutes). Returns violations at or above the configured severity threshold, remediation feedback with per-rule guidance and code snippets, and, when a session id is given, retry-loop progress tracking (resolved/new/persisting findings, soft/hard limit verdicts). Use the same session id across fix-and-recheck iterations.',
+      'Run the SecureCoder security guardian pipeline on source files. Fast guardians (syntax hard-reject checks, semgrep, bandit) always run; pass deep=true to also run CodeQL (slow: builds a CodeQL database, can take minutes). Returns violations at or above the configured severity threshold and remediation feedback with per-rule guidance and code snippets, split into MUST FIX (hard rejects: a file does not parse) and WEIGH THESE (analyzer hints: fix the real, exploitable ones, dismiss the rest with a reason). With a session id it also tracks the fix loop (resolved/new/persisting findings) and returns an advisory verdict: clean, hard_reject, continue, meta_review (soft limit) or hard_limit_exhausted. Use the same session id across fix-and-recheck iterations.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -118,7 +118,7 @@ const TOOLS = [
     name: 'securecoder_enrich_prompt',
     title: 'Add security constraints to a code-generation prompt',
     description:
-      'Enrich a code-generation prompt with contract-preserving security constraints (SecureCoder heuristic prompt enricher). Returns the enriched prompt and the list of injected constraints. Use before generating code from a user task description.',
+      'Add contract-preserving constraints to a code-generation prompt (keep names, signatures, requested algorithms and documented behavior exact; change only the unsafe part) and, when the task touches known weakness classes, a CWE checklist for them: how to detect each one, a behavior-preserving repair, its common false positives, and what the repair must preserve. Returns the enriched prompt, the list of injected constraints, and the selected weakness classes. The checklist is guidance, not a list of findings. Use before generating code from a user task description.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -256,6 +256,7 @@ async function handleAnalyze(args) {
       hardLimit: result.retry.hardLimit,
       verdict: result.retry.verdict,
       progress: result.retry.progress,
+      best: result.retry.best,
     } : null,
   };
   return { text: lines.join('\n'), structured };
@@ -273,7 +274,7 @@ async function handleConfig(args) {
     }
     case 'doctor': {
       const tools = await checkTools(resolved.effective);
-      return { text: withHint(report.renderDoctor(resolved, tools, nodeVersionOk())) };
+      return { text: withHint(report.renderDoctor(resolved, tools, nodeVersionOk(), { errors: hookErrors(resolved.root) })) };
     }
     case 'keys':
       return { text: report.renderKeys() };
@@ -299,9 +300,10 @@ async function callTool(name, args) {
       return handleAnalyze(args);
     case 'securecoder_enrich_prompt': {
       if (typeof args.prompt !== 'string') throw Object.assign(new Error('prompt must be a string'), { code: -32602 });
-      const { enriched, hints } = enrichPrompt(args.prompt);
-      traceLog((await projectRootFor(args)).root, { tool: 'securecoder_enrich_prompt', prompt: args.prompt, hints, enriched });
-      return { text: `Injected constraints:\n${hints.map((h) => `- ${h}`).join('\n')}\n\nEnriched prompt:\n${enriched}` };
+      const { enriched, hints, cwes } = enrichPrompt(args.prompt);
+      traceLog((await projectRootFor(args)).root, { tool: 'securecoder_enrich_prompt', prompt: args.prompt, hints, cwes: cwes.map((c) => c.id), enriched });
+      const classes = cwes.length ? `\n\nWeakness classes with a checklist in the enriched prompt: ${cwes.map((c) => `${c.id} ${c.name}`).join(', ')}` : '';
+      return { text: `Injected constraints:\n${hints.map((h) => `- ${h}`).join('\n')}${classes}\n\nEnriched prompt:\n${enriched}` };
     }
     case 'securecoder_reset_session':
       if (typeof args.session !== 'string' || !args.session) throw Object.assign(new Error('session must be a non-empty string'), { code: -32602 });
@@ -361,7 +363,10 @@ function refreshRoots() {
       rootsDir = first ? fileURLToPath(first) : null;
       if (rootsDir) log(`workspace root: ${rootsDir}`);
     })
-    .catch((err) => log(`roots/list failed (${err.message}); using ${fallbackRoot()}`))
+    // Must not throw: nothing handles this chain until a tool call awaits it,
+    // so a rejection here would take the process down. projectRootFor's
+    // ladder covers the missing root.
+    .catch((err) => log(`roots/list failed (${err.message})`))
     .finally(() => { rootsRequest = null; });
 }
 

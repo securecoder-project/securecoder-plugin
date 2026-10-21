@@ -13,6 +13,22 @@ function severityToConfidence(sev) {
   return 'low';
 }
 
+// The analyzer's JSON report. A run that timed out or printed something else
+// (a crash, a traceback, a failed rule download) produced no result at all;
+// reading that as "no findings" would make a broken analyzer look like clean
+// code. It throws instead, and analyze.js reports it as that analyzer's
+// failure. A binary that is not installed is different: it is handled by the
+// callers as a disabled guardian, and `doctor` reports it.
+function parseReport(name, { code, output, timedOut }, timeoutMs) {
+  if (timedOut) throw new Error(`${name} timed out after ${timeoutMs}ms`);
+  try {
+    return JSON.parse(output);
+  } catch {
+    const firstLine = output.split('\n').map((l) => l.trim()).find(Boolean) || 'no output';
+    throw new Error(`${name} exited with code ${code} without a JSON report: ${firstLine.slice(0, 200)}`);
+  }
+}
+
 // bandit -q -f json <files>
 async function runBandit(filePaths, { binary = 'bandit', extraArgs = [], timeoutMs = 60000 } = {}) {
   const pyFiles = filePaths.filter((p) => p.rel.endsWith('.py'));
@@ -23,12 +39,7 @@ async function runBandit(filePaths, { binary = 'bandit', extraArgs = [], timeout
   } catch {
     return []; // binary missing → guardian disabled
   }
-  let parsed;
-  try {
-    parsed = JSON.parse(result.output);
-  } catch {
-    return [];
-  }
+  const parsed = parseReport('bandit', result, timeoutMs);
   const absToRel = new Map(pyFiles.map((p) => [p.abs, p.rel]));
   return (parsed.results || []).map((r) => ({
     rule: {
@@ -61,11 +72,14 @@ async function runSemgrep(filePaths, { binary = 'semgrep', config = 'p/owasp-top
   } catch {
     return [];
   }
-  let parsed;
-  try {
-    parsed = JSON.parse(result.output);
-  } catch {
-    return [];
+  const parsed = parseReport('semgrep', result, timeoutMs);
+  // A fatal error (the ruleset could not be downloaded or is invalid) still
+  // comes with a JSON report: non-zero exit, no results, the reason under
+  // `errors`. Exit 1 only means findings. A target that does not parse is not
+  // this case; semgrep exits 0 for it.
+  const errors = Array.isArray(parsed.errors) ? parsed.errors : [];
+  if (result.code !== 0 && result.code !== 1 && errors.length > 0 && !(parsed.results || []).length) {
+    throw new Error(`semgrep exited with code ${result.code}: ${String(errors[0].message || errors[0].type || 'error').split('\n')[0].slice(0, 200)}`);
   }
   const absToRel = new Map(filePaths.map((p) => [p.abs, p.rel]));
   return (parsed.results || []).map((r) => {

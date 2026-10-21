@@ -7,7 +7,8 @@
 // plugin-root variable resolved to an absolute path.
 //
 // Merging is idempotent: entries are recognized by the hook script name, so
-// reinstalling replaces SecureCoder's own entries and never touches yours.
+// reinstalling replaces SecureCoder's own entries (including ones written by
+// an older version in another shape) and never touches yours.
 
 'use strict';
 
@@ -22,16 +23,26 @@ function hookScriptPath(pluginRoot = PLUGIN_ROOT) {
   return path.join(pluginRoot, 'hooks', HOOK_SCRIPT);
 }
 
-// The events and matchers mirror hooks/hooks.json.
-function buildEntries(pluginRoot = PLUGIN_ROOT) {
-  const script = hookScriptPath(pluginRoot);
+// Double quotes are the one form both a POSIX shell and cmd.exe accept around
+// a path with spaces. Inside them a POSIX shell still expands \ " $ and `, so
+// those are escaped there; a Windows path cannot contain a double quote and
+// its backslashes are separators, so it is quoted as it stands.
+function quotePath(file, platform = process.platform) {
+  return platform === 'win32' ? `"${file}"` : `"${file.replace(/[\\"$`]/g, '\\$&')}"`;
+}
+
+// The events, matchers and timeouts mirror hooks/hooks.json. Each command is
+// one shell-form string, as it is there: Codex command hooks have no `args`
+// field and drop it silently, so a `command: "node"` + `args` entry runs bare
+// `node` and never reaches the script.
+function buildEntries(pluginRoot = PLUGIN_ROOT, platform = process.platform) {
+  const command = (event) => `node ${quotePath(hookScriptPath(pluginRoot), platform)} ${event}`;
   return {
     PostToolUse: {
       matcher: 'Write|Edit|MultiEdit|apply_patch',
       hooks: [{
         type: 'command',
-        command: 'node',
-        args: [script, 'post-edit'],
+        command: command('post-edit'),
         timeout: 180,
         statusMessage: 'SecureCoder: scanning edited files',
       }],
@@ -40,9 +51,17 @@ function buildEntries(pluginRoot = PLUGIN_ROOT) {
       matcher: 'Bash',
       hooks: [{
         type: 'command',
-        command: 'node',
-        args: [script, 'pre-shell'],
+        command: command('pre-shell'),
         timeout: 15,
+      }],
+    },
+    // No matcher: the event has none. No statusMessage: it would flash on
+    // every prompt.
+    UserPromptSubmit: {
+      hooks: [{
+        type: 'command',
+        command: command('user-prompt'),
+        timeout: 10,
       }],
     },
   };

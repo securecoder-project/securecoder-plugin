@@ -7,6 +7,7 @@
 // - every path a manifest references exists and stays inside the plugin root
 // - every SKILL.md follows the Agent Skills frontmatter rules
 // - agent files carry name + description; hook configs parse and reference real scripts
+// - hooks/hooks.json and the entries install-hooks writes name the same events and matchers
 
 'use strict';
 
@@ -134,6 +135,19 @@ for (const [rel, variable] of [['hooks/hooks.json', '${CLAUDE_PLUGIN_ROOT}'], ['
     if (!script || !script[1].startsWith(`${variable}/`)) fail(`${rel}: command should quote a ${variable}-relative script: ${command}`);
     else checkPath(script[1].slice(variable.length + 1), rel);
   }
+}
+
+// `securecoder install-hooks` writes the same hooks into a harness's own config
+// from harness-hooks.js. The two definitions differ in command shape (a
+// plugin-root variable here, an absolute path there), so they are not derived
+// from one another; what must not drift is which events fire and on what.
+const declaredHooks = (readJson('hooks/hooks.json') || {}).hooks || {};
+const installedHooks = require(path.join(ROOT, 'mcp-server', 'lib', 'harness-hooks.js')).buildEntries();
+const eventMatchers = (groups) => JSON.stringify(Object.entries(groups)
+  .map(([event, group]) => [event, (Array.isArray(group) ? group[0] : group).matcher || null])
+  .sort(([a], [b]) => a.localeCompare(b)));
+if (eventMatchers(declaredHooks) !== eventMatchers(installedHooks)) {
+  fail(`hooks/hooks.json and harness-hooks.js buildEntries() disagree on events or matchers: ${eventMatchers(declaredHooks)} vs ${eventMatchers(installedHooks)}`);
 }
 
 // ── skills and agents ────────────────────────────────────────────────────────

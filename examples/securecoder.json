@@ -21,13 +21,10 @@
   },
   "hooks": {
     "post_edit": true,
-    "shell_guard": true
+    "shell_guard": true,
+    "user_prompt": true
   },
   "codeql": {
-    "languages": null,
-    "query_packs": {},
-    "threads": 1,
-    "ram_mb": 2048,
     "timeout_seconds": 600
   }
 }

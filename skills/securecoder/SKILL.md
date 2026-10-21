@@ -45,6 +45,7 @@ Your job is to translate the arguments into **one CLI call** (two for `limits` a
 | `exclude list` | `securecoder config get exclude_patterns` |
 | `hooks post-edit on\|off` | `securecoder config set hooks.post_edit <on\|off>` |
 | `hooks shell-guard on\|off` | `securecoder config set hooks.shell_guard <on\|off>` |
+| `hooks user-prompt on\|off` | `securecoder config set hooks.user_prompt <on\|off>` |
 | `get <key>` / `set <key> <value>` / `unset <key>` | `securecoder config get\|set\|unset <key> [value]` |
 | `scan [paths…] [--deep]` | `securecoder scan [--deep] [paths…]` (no paths: files changed since HEAD) |
 | `doctor` | `securecoder doctor` |
@@ -64,6 +65,13 @@ subcommand. Don't guess at a write.
   environment variable still overrides the value.
 - On exit code 2 (invalid key or value), show the error and the allowed values, then ask what
   the user meant. Do not retry with a guess.
+- `off`, and `mode advisory` while the user-level mode is `enforce`, cannot be written to
+  project or local scope: a file inside the repository may strengthen these two settings but
+  never weaken them. The CLI refuses with `"enabled" cannot be turned off from … config` (or
+  `"mode" cannot be lowered to advisory …`) and exit code 2. Relay that message, then offer the
+  two real options and let the user pick: `--scope user`, which affects every project, or the
+  environment variable it names (`SECURECODER_ENABLED=off` / `SECURECODER_MODE=advisory`) for one
+  session. Never retry with a different scope on your own initiative.
 - For `scan`: summarize the findings by severity. If there are any, offer to fix them with the
   `securecoder-remediator` agent (or a `securecoder_analyze` fix-and-recheck loop using one
   session id).
@@ -76,7 +84,8 @@ one; otherwise show a numbered list and wait for the reply:
 1. **Protection level**: turn SecureCoder on or off, switch advisory ↔ enforce, change the
    severity threshold
 2. **Analyzers**: choose fast analyzers, turn deep CodeQL on or off, change the semgrep ruleset
-3. **Scope of analysis**: exclusions, retry limits, post-edit scan and shell-guard hooks
+3. **Scope of analysis**: exclusions, retry limits, and the three hooks: post-edit scan, shell
+   guard, and the per-prompt security constraints (`hooks user-prompt`, Claude Code and Codex only)
 4. **Nothing**: leave settings unchanged
 
 Ask one follow-up question to get the concrete value, run the matching command from the table,

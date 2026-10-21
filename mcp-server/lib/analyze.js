@@ -90,10 +90,6 @@ async function analyze({
   if (selected.has('codeql')) {
     guard('codeql', runCodeQLGuardian(files, {
       binary: config.codeql.binary,
-      enabledLanguages: config.codeql.languages,
-      queryPackOverrides: config.codeql.query_packs || {},
-      threads: config.codeql.threads,
-      ramMb: config.codeql.ram_mb,
       timeoutMs: (config.codeql.timeout_seconds || 600) * 1000,
       log,
     }));

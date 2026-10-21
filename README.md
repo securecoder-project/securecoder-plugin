@@ -1,6 +1,6 @@
 # SecureCoder
 
-**Security-aware code generation for coding agents.** SecureCoder adds security constraints before your agent writes code, scans every file it edits with static analyzers, and runs a guided fix-and-recheck loop when it finds problems. It works in **Claude Code, Codex, Cursor, and OpenCode**, and brings its skills and MCP tools to GitHub Copilot, VS Code, and Kiro through the [Agent Plugins](https://agent-plugins.org) standard.
+**Security-aware code generation for coding agents.** SecureCoder adds security constraints before your agent writes code, scans every file it edits with static analyzers, and guides a fix-and-recheck loop when it finds problems. It works in **Claude Code, Codex, Cursor, and OpenCode**, and brings its skills and MCP tools to GitHub Copilot, VS Code, and Kiro through the [Agent Plugins](https://agent-plugins.org) standard.
 
 An [ATHENE](https://www.athene-center.de/) project by the Software Technology Group (STG) at TU Darmstadt. Analysis runs through a zero-dependency Node MCP server ported from the [SecureCoder](https://securecoder-project.github.io/) research engine.
 
@@ -10,9 +10,9 @@ An [ATHENE](https://www.athene-center.de/) project by the Software Technology Gr
 
 ## What it does
 
-1. **Before generation.** The `secure-codegen` skill and the `securecoder_enrich_prompt` tool add contract-preserving security constraints: parameterized queries, no shell interpolation, safe crypto, while keeping your function signatures and requested algorithms exactly as asked.
-2. **After every edit.** A hook runs the fast guardians (syntax hard-reject checks, [semgrep](https://semgrep.dev), [bandit](https://bandit.readthedocs.io)) on the files the agent just wrote and hands the findings back to the agent. [CodeQL](https://codeql.github.com) deep analysis runs on demand.
-3. **When findings appear.** The `securecoder-remediator` agent fixes them and re-analyzes until the code is clean or the retry policy says stop, then reports what changed.
+1. **Before generation.** On Claude Code and Codex, a hook adds SecureCoder's core secure-coding constraints to every prompt: parameterized queries, no shell interpolation, safe parsers and crypto, while keeping your function signatures and documented behavior exactly as asked. On the other harnesses the `secure-codegen` skill carries the same constraints. Everywhere, the `securecoder_enrich_prompt` tool adds contract-preservation rules and a checklist for the weakness classes a task touches.
+2. **After every edit.** A hook runs the fast guardians (syntax hard-reject checks, [semgrep](https://semgrep.dev), [bandit](https://bandit.readthedocs.io)) on the files the agent just wrote and hands the findings back to the agent. A file that does not parse must be fixed; in the default advisory mode every other finding is a hint for the agent to weigh. [CodeQL](https://codeql.github.com) deep analysis runs on demand.
+3. **When findings appear.** The `securecoder-remediator` agent fixes the real ones, dismisses false positives with a reason, and re-analyzes until the code is clean, every remaining finding has been dismissed with a reason, or the retry limits advise stopping. It then reports what changed.
 4. **Before risky shell commands.** A small, high-signal shell guard flags remote scripts piped into a shell, disabled TLS verification, `chmod 777`, broad `rm -rf`, and inline credentials.
 
 Everything is configurable from one command: **`/securecoder`**.
@@ -23,13 +23,18 @@ Everything is configurable from one command: **`/securecoder`**.
 | --- | :---: | :---: | :---: | :---: | :---: |
 | MCP tools (`securecoder_analyze`, …) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `secure-codegen` skill | ✓ | ✓ | ✓ | ✓ (command) | ✓ |
+| Security constraints added to every prompt | ✓ | ✓² | – | – | – |
 | `/securecoder` settings | `/securecoder` | `$securecoder:securecoder` | ✓ | `/securecoder` | ✓ (skill) |
-| Post-edit scan | ✓ | ✓ | ✓ | ✓ | – |
-| Enforce mode blocks until fixed | ✓ | ✓ | context only¹ | context only¹ | – |
-| Shell guard | ✓ | ✓ | ✓ | ✓ (enforce blocks) | – |
+| Post-edit scan | ✓ | ✓² | ✓ | ✓ | – |
+| Enforce mode blocks until fixed | ✓ | ✓² | context only¹ | context only¹ | – |
+| Shell guard | ✓ | ✓² | ✓ | ✓ (enforce blocks) | – |
 | Remediator agent | ✓ | via skill + MCP | ✓ | ✓ (subagent) | – |
 
 ¹ Cursor and OpenCode have no "block after a tool ran" hook. In enforce mode, SecureCoder adds stronger instructions to the agent context instead.
+
+² Codex runs SecureCoder's hooks only after you approve them under `/hooks`. On Codex builds that do not load plugin hooks, run `securecoder install-hooks codex` first, then approve them.
+
+On Claude Code and Codex, a hook adds SecureCoder's core secure-coding constraints to every prompt, plus one line for each weakness class the prompt mentions (at most six), so they reach the model whether or not it loads the `secure-codegen` skill. Claude Code does not run the hook for subagent prompts. On Cursor the prompt hook can only allow or block, OpenCode has no documented per-prompt hook, and Copilot, VS Code, and Kiro run no SecureCoder hooks, so on those harnesses the constraints reach the model only when it loads the skill. Turn the hook off with `/securecoder hooks user-prompt off`.
 
 ## Requirements
 
@@ -119,15 +124,15 @@ Run it with no arguments to get a dashboard of every setting, where each value c
 | Command | What it does |
 | --- | --- |
 | `/securecoder` · `status` | Dashboard and interactive menu |
-| `on` · `off` | Turn SecureCoder on or off |
+| `on` · `off` | Turn SecureCoder on or off. Inside a project, `off` needs `--scope user` (see below) |
 | `mode advisory` · `mode enforce` | **advisory** (default): findings go to the agent as context. **enforce**: findings at or above the threshold block the agent until fixed, and flagged shell commands need your approval |
 | `severity low\|medium\|high` | Minimum severity to report (hard rejects are always reported) |
 | `analyzers syntax,semgrep` · `analyzers +bandit -semgrep` | Choose the fast analyzers |
 | `deep on\|off` | Allow CodeQL deep analysis |
 | `ruleset p/security-audit` | Semgrep ruleset (registry id, `auto`, or a local rules path) |
-| `limits 5 10` | Remediation soft/hard retry limits |
+| `limits 5 10` | Remediation soft/hard retry limits: the attempts at which `securecoder_analyze` advises the agent to review progress and to stop |
 | `exclude add 'generated/'` · `exclude remove …` · `exclude list` | Paths to skip |
-| `hooks post-edit off` · `hooks shell-guard off` | Toggle each hook |
+| `hooks post-edit off` · `hooks shell-guard off` · `hooks user-prompt off` | Toggle each hook |
 | `scan [paths] [--deep]` | Scan files (default: changed since `HEAD`) and offer fixes |
 | `doctor` | Check analyzers and config, with install commands |
 | `init` | Write a starter `.securecoder.json` for your team |
@@ -138,11 +143,13 @@ Add `--scope user|project|local` to choose where a change is saved:
 
 | Scope | File | Use for |
 | --- | --- | --- |
-| `local` *(default inside a project)* | `.securecoder.local.json` | Your personal overrides in this repo (gitignore it with `securecoder config gitignore`) |
+| `local` *(default inside a project)* | `.securecoder.local.json` | Your personal overrides in this repo (`securecoder config gitignore` ignores it, along with the `.securecoder/` error log) |
 | `project` | `.securecoder.json` | Team settings, committed |
 | `user` *(default elsewhere)* | `~/.config/securecoder/config.json` | Defaults for all your projects, and executable paths |
 
 Precedence: **default < user < project < local < environment variables.** The dashboard shows the source of every value, and SecureCoder warns you whenever a change lowers protection.
+
+One exception: a file inside the repository (project or local scope) can raise `enabled` and `mode` but not lower them below your user config and the defaults. A lower value there is ignored with a warning, and the CLI refuses to write one. So inside a project, `/securecoder off` is refused; use `/securecoder off --scope user`, which applies to all your projects, or set `SECURECODER_ENABLED=off` for one run. `mode advisory` is refused the same way when your user config says `enforce` (`SECURECODER_MODE=advisory` overrides it for one run).
 
 The same operations work from a terminal:
 
@@ -167,19 +174,23 @@ securecoder scan --deep src/auth.py
 | `semgrep_config` | `p/owasp-top-ten` | |
 | `exclude_patterns` | `tests/`, `*.test.js`, `*.test.ts`, `*.spec.*`, `migrations/`, `node_modules/`, `__pycache__/` | |
 | `retry.soft_limit` / `retry.hard_limit` | `7` / `14` | |
-| `hooks.post_edit` / `hooks.shell_guard` | `on` / `on` | `SECURECODER_POST_EDIT` / `SECURECODER_SHELL_GUARD` |
-| `codeql.languages`, `.threads`, `.ram_mb`, `.timeout_seconds` | all detected, `1`, `2048`, `600` | |
+| `hooks.post_edit` / `hooks.shell_guard` / `hooks.user_prompt` | `on` / `on` / `on` | `SECURECODER_POST_EDIT` / `SECURECODER_SHELL_GUARD` / `SECURECODER_USER_PROMPT` |
+| `codeql.timeout_seconds` | `600` | |
 | `bins.*`, `codeql.binary` *(user scope only)* | `semgrep`, `bandit`, `python3`, … | `SEMGREP_BIN`, `BANDIT_BIN`, `CODEQL_BIN`, `PYTHON_BIN`, … |
 | `trace_log` *(user scope only)* | unset | `SECURECODER_TRACE_LOG` |
 
 See [`examples/securecoder.json`](examples/securecoder.json) for a complete project file.
 
+`SECURECODER_CONFIG` points SecureCoder at a different project config file for one run, for example `SECURECODER_CONFIG=ci/securecoder.json securecoder scan`. A relative path is resolved against the project root. The file replaces `.securecoder.json` for that run, and it is still project scope: `bins.*`, `codeql.binary`, and `trace_log` in it are ignored, and it cannot lower `enabled` or `mode`.
+
+`mode` and the retry limits are independent. `mode` decides what the hooks return: context in advisory mode, a blocking decision (or an approval prompt for a flagged shell command) in enforce mode, and the harness acts on that. The retry limits only shape the verdict `securecoder_analyze` returns when it is called with a `session` id: `clean`, `hard_reject`, `continue`, `meta_review` (soft limit reached), or `hard_limit_exhausted`. `hard_reject` (a file does not parse) takes precedence over both limits. A verdict is advice to the agent. SecureCoder does not run the fix loop and cannot stop it.
+
 ## Security and privacy
 
 - All analysis runs locally. The only network access is semgrep downloading registry rulesets such as the default `p/owasp-top-ten`; point `semgrep_config` at local rules to stay offline.
-- Repository config files are treated as untrusted. They can't choose which programs SecureCoder runs: `bins.*`, `codeql.binary`, and `trace_log` are honored only from user config or the environment.
+- Repository config files are treated as untrusted. They can't choose which programs SecureCoder runs: `bins.*`, `codeql.binary`, and `trace_log` are honored only from user config or the environment. They also can't turn SecureCoder off or lower `mode`. They can still raise the severity threshold, drop analyzers, add exclusions, and switch individual hooks off.
 - Agents can read settings through MCP but can't change them there. Changes go through `/securecoder` or the CLI, which run under your harness's normal command approval.
-- Hooks fail open: an analyzer crash never blocks your agent.
+- Hooks fail open: an analyzer crash never blocks your agent. Each fault is recorded in `.securecoder/errors.log` in the project, and `securecoder doctor` reports the count and the latest entry.
 
 Details and vulnerability reporting: [SECURITY.md](SECURITY.md).
 
