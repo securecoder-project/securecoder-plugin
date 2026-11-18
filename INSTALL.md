@@ -6,7 +6,7 @@ it works. For a shorter overview see the [README](README.md); for working on the
 
 - [Before you start](#before-you-start)
 - [Install](#install)
-  - [Claude Code](#claude-code) · [Codex](#codex) · [Cursor](#cursor) · [VS Code](#vs-code-github-copilot) · [OpenCode](#opencode) · [Other Agent Plugins clients](#other-agent-plugins-clients)
+  - [Claude Code](#claude-code) · [Codex](#codex) · [Cursor](#cursor) · [VS Code](#vs-code-github-copilot) · [OpenCode](#opencode) · [Copilot CLI](#github-copilot-cli) · [Kiro](#kiro) · [Other Agent Plugins clients](#other-agent-plugins-clients)
 - [Verify the install](#verify-the-install)
 - [Usage](#usage)
 - [Configuration](#configuration)
@@ -32,21 +32,18 @@ it works. For a shorter overview see the [README](README.md); for working on the
 After installing, run `/securecoder doctor` (or `node <plugin>/bin/securecoder doctor`) to see
 what was found, with an install command for anything missing.
 
-**Repository access.** While this repository is private, every marketplace command below needs
-git credentials that can read it: either an SSH key (use the `git@github.com:…` URL) or a
-credential helper / `gh auth login` for the `https` form. Collaborators need repo access. Once the
-repository is public, the same commands work for everyone with no extra setup.
-
 **Which install method applies where:**
 
 | Agent | Method | Automatic scanning |
 | --- | --- | --- |
 | Claude Code | Marketplace | Yes |
 | Codex | Marketplace | Yes, after you trust the hooks |
-| Cursor | Local clone | Yes |
-| VS Code (Copilot) | Install from source, or a local path setting | No (tools only) |
-| OpenCode | Local clone plus a loader file | Yes |
-| Copilot CLI, Kiro, other Agent Plugins clients | Client's plugin directory | No (tools only) |
+| Cursor | Marketplace (or local clone) | Yes |
+| VS Code (Copilot) | Marketplace, install from source, or a local path setting | No (tools only) |
+| OpenCode | `opencode plugin add` (2.x), or local clone plus a loader file | Yes |
+| Copilot CLI | Marketplace | No (tools only) |
+| Kiro | Import power from GitHub | No (tools only) |
+| Other Agent Plugins clients | Client's plugin directory | No (tools only) |
 
 ---
 
@@ -125,15 +122,27 @@ A clone only ever contains committed files.
 
 ### Cursor
 
-Cursor installs individual plugins from a local folder (repo-URL installs are a team-marketplace
-feature), so clone into its local plugins directory:
+In the Cursor app, open **Customize → Plugins**, add a marketplace, and paste the repository URL:
+
+```
+https://github.com/securecoder-project/securecoder-plugin
+```
+
+SecureCoder then appears in the plugin list. Select **Install** and choose user or project scope.
+
+**Alternative: local clone.** For an offline install, or a Cursor build without marketplace
+support, clone into Cursor's local plugins directory and restart Cursor:
 
 ```bash
 mkdir -p ~/.cursor/plugins/local
 git clone git@github.com:securecoder-project/securecoder-plugin.git ~/.cursor/plugins/local/securecoder
 ```
 
-Restart Cursor and look under **Customize → Plugins**. Cursor reads either
+Teams on Cursor's Teams or Enterprise plans can also import the repository as a team marketplace
+(**Dashboard → Plugins → Team Marketplaces → Import from Repo**) so members install it from
+**Customize**.
+
+However you install it, Cursor reads either
 `.cursor-plugin/plugin.json` (skills, agents, hooks, MCP) or the root `plugin.json` (skills and
 MCP) and picks one automatically: if the hooks and the remediator agent show up, it chose the
 Cursor manifest.
@@ -142,11 +151,17 @@ The `cursor-agent` CLI does not support plugins in older builds; use the Cursor 
 
 ### VS Code (GitHub Copilot)
 
-Command Palette → **Chat: Install Plugin From Source**, then paste:
+Add the repository as a marketplace: run **Chat: Open Customizations**, select **Browse**, open
+the source menu, choose **Configure Marketplaces → Add Marketplace**, and enter:
 
 ```
-https://github.com/securecoder-project/securecoder-plugin
+securecoder-project/securecoder-plugin
 ```
+
+Then pick SecureCoder from the list and select **Install**.
+
+Or install it directly: Command Palette → **Chat: Install Plugin From Source**, then paste
+`https://github.com/securecoder-project/securecoder-plugin`.
 
 Or point VS Code at a local checkout in your user `settings.json`
 (**Preferences: Open User Settings (JSON)**):
@@ -169,7 +184,15 @@ Automatic post-edit scanning does **not** run: VS Code looks for plugin hooks at
 
 ### OpenCode
 
-OpenCode loads JavaScript plugins from a plugins folder. Clone the repository, then write a
+On OpenCode 2.x, install it straight from the repository:
+
+```bash
+opencode plugin add github:securecoder-project/securecoder-plugin
+```
+
+That adds the plugin to your global `opencode.json`, so it loads in every project.
+
+**Alternative: local clone.** This works on OpenCode 1.x too. Clone the repository, then write a
 one-line loader that re-exports the adapter:
 
 ```bash
@@ -185,12 +208,34 @@ For a single project, write the same file to `.opencode/plugins/securecoder.js` 
 The plugin registers the MCP server, the `/securecoder` and `/secure-codegen` commands, and the
 `@securecoder-remediator` subagent. Anything you already defined under those names is left alone.
 
+### GitHub Copilot CLI
+
+```bash
+copilot plugin marketplace add securecoder-project/securecoder-plugin
+copilot plugin install securecoder@securecoder
+```
+
+Inside an interactive session the same commands are `/plugin marketplace add …` and
+`/plugin install …`. To skip the marketplace, `copilot plugin install
+securecoder-project/securecoder-plugin` installs straight from the repository root.
+
+Copilot CLI reads the root `plugin.json`, so you get the skills and the MCP tools. It looks for
+plugin hooks at `com.github.copilot/hooks/hooks.json`, which this plugin does not ship, so there is
+no automatic post-edit scan.
+
+### Kiro
+
+In the Kiro IDE, open the **Powers** panel, choose **Add Custom Power → Import power from
+GitHub**, enter `https://github.com/securecoder-project/securecoder-plugin`, and select
+**Install**. Kiro reads the root `plugin.json` and gives you the skills and the MCP tools. Powers
+are an IDE feature: `kiro-cli` does not load them.
+
 ### Other Agent Plugins clients
 
-Copilot CLI, Kiro, and other [Agent Plugins 1.0](https://agent-plugins.org) clients install from
-the repository URL through their own plugin directory, and read the root `plugin.json`,
-`mcp.json`, and `skills/`. That gives you the skills and the MCP tools; hooks are client-specific
-and not part of the standard.
+Other [Agent Plugins 1.0](https://agent-plugins.org) clients install from the repository URL
+through their own plugin directory, and read the root `plugin.json`, `mcp.json`, and `skills/`.
+That gives you the skills and the MCP tools; hooks are client-specific and not part of the
+standard.
 
 ---
 
@@ -206,7 +251,9 @@ Three checks, in increasing depth.
 | Codex | `codex plugin list` and `codex mcp list`; `/hooks` shows the hooks as trusted |
 | Cursor | **Customize → Plugins** lists SecureCoder |
 | VS Code | **Extensions → Agent Plugins - Installed** |
-| OpenCode | `opencode mcp list` shows `securecoder-analysis connected` |
+| OpenCode | `opencode mcp list`, run from a project, shows `securecoder-analysis connected` (right after OpenCode starts, the first call can come back empty; run it again) |
+| Copilot CLI | `copilot plugin list` |
+| Kiro | the **Powers** panel lists SecureCoder |
 
 **2. Does the analysis work?** From any terminal:
 
@@ -423,9 +470,10 @@ offline.
 | --- | --- | --- |
 | Claude Code | `/plugin marketplace update securecoder` | `/plugin uninstall securecoder@securecoder` |
 | Codex | `codex plugin marketplace upgrade` | `codex plugin remove securecoder` |
-| Cursor | `git -C ~/.cursor/plugins/local/securecoder pull`, restart | delete that folder, restart |
-| VS Code | reinstall from source, or `git pull` the local path | remove the `chat.pluginLocations` entry, or uninstall from the Extensions view |
-| OpenCode | `git -C ~/.local/share/securecoder pull` | delete `~/.config/opencode/plugins/securecoder.js` |
+| Cursor | marketplace: **Customize → Plugins**; local clone: `git -C ~/.cursor/plugins/local/securecoder pull`, restart | marketplace: uninstall in **Customize → Plugins**; local clone: delete that folder, restart |
+| VS Code | **Chat: Update Plugins**, or `git pull` the local path | **Chat: Open Customizations → Plugins →** the plugin → **Uninstall**, or remove the `chat.pluginLocations` entry |
+| Copilot CLI | `copilot plugin update securecoder` | `copilot plugin uninstall securecoder` |
+| OpenCode | `opencode plugin update`; local clone: `git -C ~/.local/share/securecoder pull` | `opencode plugin remove github:securecoder-project/securecoder-plugin`; local clone: delete `~/.config/opencode/plugins/securecoder.js` |
 
 To switch it off without uninstalling, use `/securecoder off --scope user` (or `securecoder config
 set enabled off --scope user`), which leaves everything installed but idle in all your projects.
@@ -438,7 +486,7 @@ the command is refused inside a project; see [Configuration](#configuration).
 
 | Symptom | Cause and fix |
 | --- | --- |
-| Installed, but the agent has no `securecoder_*` tools | The installed copy predates 0.2.0, or the install is stale. Update the marketplace and reinstall, then confirm `securecoder --version` and the version in `plugin list` are both 0.3.0. |
+| Installed, but the agent has no `securecoder_*` tools | The installed copy predates 0.2.0, or the install is stale. Update the marketplace and reinstall, then confirm `securecoder --version` and the version in `plugin list` are both 0.3.1. |
 | Codex plugin view says "No plugin hooks" | That build does not load plugin-bundled hooks. Run `securecoder install-hooks codex`, restart Codex, and approve them under `/hooks`. Remove them with `uninstall-hooks codex` if plugin hooks start working, to avoid scanning twice. |
 | Codex hooks installed with 0.2.0 never fire | The entries `install-hooks codex` wrote in 0.2.0 used a form Codex does not run. Run `securecoder install-hooks codex` again, restart Codex, and approve the hooks under `/hooks` once more. |
 | Nothing happens after the agent writes a file | Is it on? `/securecoder status` shows `enabled` and `hooks.post_edit`. In Codex, hooks need approval under `/hooks`. In VS Code, hooks are not supported yet. Also check the path is not covered by `exclude_patterns`, and run `securecoder doctor` to see whether the hook has been failing. |
@@ -451,7 +499,7 @@ the command is refused inside a project; see [Configuration](#configuration).
 | MCP server fails with "Connection closed" | Usually a leftover project-level MCP entry pointing at a plugin path. Remove `securecoder-analysis` from the project's `.claude/settings.json` / `.mcp.json`; the plugin registers its own server. |
 | Settings changes seem to have no effect | A higher-precedence scope is winning. The dashboard's Source column shows which, and the CLI prints a `Note:` line when it happens. Environment variables beat every file. For `enabled` and `mode`, a weakening value in a project or local file is ignored; the dashboard lists it under Warnings. |
 | Analyzer paths in `.securecoder.json` are ignored | By design: `bins.*` and `codeql.binary` are honored only from user config or environment variables. Run `securecoder config set bins.semgrep /path --scope user`. |
-| Marketplace add fails with a permissions or not-found error | The repository is private: use the `git@github.com:…` SSH URL, or authenticate https (`gh auth login`). |
+| Marketplace add fails with a permissions or not-found error | Check the URL. If you use the `git@github.com:…` SSH form, your SSH key must be set up for GitHub; the `https` form needs no credentials. |
 | Marketplace add fails saying the source differs | That marketplace name is already registered with a different URL. `/plugin marketplace remove securecoder`, then add again. |
 | CodeQL runs forever | It builds a database; that is minutes, not seconds. Use it deliberately (`--deep`, or `deep: true`), and raise or lower `codeql.timeout_seconds` (per CodeQL step, default 600). |
 | Post-edit scans feel slow | semgrep dominates. Narrow `semgrep_config`, or drop semgrep from `analyzers` and rely on `scan --deep` at review time. |

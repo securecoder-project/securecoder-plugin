@@ -4,6 +4,21 @@ All notable changes to SecureCoder are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-11-18
+
+### Fixed
+
+- **OpenCode 2.x loads SecureCoder again.** OpenCode 2.x runs only plugins that export
+  `setup(ctx)`, so on 2.x the MCP server, commands, subagent, post-edit scan, and shell guard were
+  all silently missing. The adapter now registers through the 2.x domain APIs too, and a root
+  `server.js` gives 2.x the entry point it looks for. OpenCode 1.x keeps using the same file.
+
+### Changed
+
+- OpenCode 2.x installs with `opencode plugin add github:securecoder-project/securecoder-plugin`.
+- The install guide covers marketplace installs for Cursor, VS Code, and GitHub Copilot CLI, and
+  Kiro's import from GitHub.
+
 ## [0.3.0] - 2026-10-11
 
 ### Added
@@ -187,6 +202,7 @@ All notable changes to SecureCoder are documented here. The format follows
 - Initial Claude Code plugin: prompt enrichment, post-write SAST hook, remediation agent, and the
   zero-dependency MCP server ported from the SecureCoder Kotlin engine.
 
+[0.3.1]: https://github.com/securecoder-project/securecoder-plugin/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/securecoder-project/securecoder-plugin/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/securecoder-project/securecoder-plugin/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/securecoder-project/securecoder-plugin/releases/tag/v0.1.0

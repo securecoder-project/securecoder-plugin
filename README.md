@@ -75,7 +75,7 @@ Then start Codex and approve SecureCoder's hooks under `/hooks`. Codex requires 
 
 ### Cursor
 
-Load a checkout as a local plugin, then restart Cursor. It appears under **Customize**:
+In **Customize → Plugins**, add a marketplace with the repository URL `https://github.com/securecoder-project/securecoder-plugin`, then install SecureCoder from the list. Or load a checkout as a local plugin and restart Cursor:
 
 ```shell
 git clone https://github.com/securecoder-project/securecoder-plugin ~/.cursor/plugins/local/securecoder
@@ -85,7 +85,13 @@ Teams can also distribute it through a Cursor team marketplace, which supports t
 
 ### OpenCode
 
-Clone the repository, then add a one-line loader to your global (or project `.opencode/`) plugins folder:
+On OpenCode 2.x:
+
+```shell
+opencode plugin add github:securecoder-project/securecoder-plugin
+```
+
+On OpenCode 1.x, or to run from a checkout, clone the repository and add a one-line loader to your global (or project `.opencode/`) plugins folder:
 
 ```shell
 git clone https://github.com/securecoder-project/securecoder-plugin ~/.local/share/securecoder
@@ -99,7 +105,7 @@ See [`opencode/README.md`](opencode/README.md) for details.
 
 ### VS Code (GitHub Copilot)
 
-Run **Chat: Install Plugin From Source** from the Command Palette and paste the repository URL, or point VS Code at a local checkout in your user `settings.json`:
+Add `securecoder-project/securecoder-plugin` as a marketplace (**Chat: Open Customizations → Browse → Configure Marketplaces → Add Marketplace**) and install SecureCoder from it. You can also run **Chat: Install Plugin From Source** and paste the repository URL, or point VS Code at a local checkout in your user `settings.json`:
 
 ```json
 {
@@ -111,9 +117,16 @@ Run **Chat: Install Plugin From Source** from the Command Palette and paste the 
 
 Reload the window and check **Extensions → Agent Plugins - Installed**.
 
+### GitHub Copilot CLI
+
+```shell
+copilot plugin marketplace add securecoder-project/securecoder-plugin
+copilot plugin install securecoder@securecoder
+```
+
 ### Kiro and other Agent Plugins clients
 
-Install from the repository URL through your client's plugin directory. These clients read the root `plugin.json`, `mcp.json`, and `skills/`, which give you the skills and the MCP tools.
+In Kiro, open the **Powers** panel and choose **Add Custom Power → Import power from GitHub** with the repository URL. Other clients install from the repository URL through their own plugin directory. These clients read the root `plugin.json`, `mcp.json`, and `skills/`, which give you the skills and the MCP tools.
 
 ---
 

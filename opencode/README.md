@@ -1,13 +1,21 @@
 # SecureCoder for OpenCode
 
-`index.js` is a native [OpenCode plugin](https://opencode.ai/docs/plugins/) built on the same analysis pipeline as the other harnesses. When OpenCode loads it, it:
+`index.js` is a native [OpenCode plugin](https://opencode.ai/docs/plugins/) built on the same analysis pipeline as the other harnesses. One default export serves both plugin APIs: OpenCode 2.x calls its `setup(ctx)` and OpenCode 1.x calls its `server()`. OpenCode 2.x loads a plugin directory's root `server.js`, which re-exports this file. When OpenCode loads it, it:
 
 - registers the `securecoder-analysis` MCP server (unless your `opencode.json` already defines one with that name)
 - adds the `/securecoder` (settings) and `/secure-codegen` commands, and the `securecoder-remediator` subagent (`@securecoder-remediator`). Entries you already defined with those names are left untouched
 - scans every file changed by `write`, `edit`, `multiedit`, or `patch` and appends findings to that tool's result, so the model sees them right away
-- runs the shell guard on `bash`: in advisory mode a note is appended to the command output; in enforce mode a flagged command is refused before it runs
+- runs the shell guard on `shell` (2.x) or `bash` (1.x): in advisory mode a note is appended to the command output; in enforce mode a flagged command is refused before it runs
 
 It has no dependencies and needs only Node-compatible built-ins (OpenCode runs plugins on Bun).
+
+## Install from the repository (OpenCode 2.x)
+
+```shell
+opencode plugin add github:securecoder-project/securecoder-plugin
+```
+
+Update with `opencode plugin update`; remove with `opencode plugin remove github:securecoder-project/securecoder-plugin`.
 
 ## Install from a checkout
 
@@ -25,12 +33,12 @@ Update later with `git -C ~/.local/share/securecoder pull`.
 
 ## Install from npm
 
-Once the package is published, add it to `opencode.json`:
+Once the package is published, add it to `opencode.json` (OpenCode 1.x calls the key `plugin`):
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["securecoder-agent-plugin"]
+  "plugins": ["securecoder-agent-plugin"]
 }
 ```
 
